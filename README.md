@@ -54,3 +54,12 @@ Modificaciones realizadas: selección de formas verificadas por es_MX,
 exclusión de ñ y otros caracteres fuera del alfabeto acordado,
 eliminación de tildes, límite de seis letras, eliminación de duplicados
 y orden alfabético.
+
+## Probar el agente
+
+Desde la raíz del repositorio:
+
+```powershell
+python -m autocorrector.cli gstp --teclado qwerty
+python -m autocorrector.cli gatp --teclado aleatorio --semilla 2026
+python -m unittest discover -s tests -v
