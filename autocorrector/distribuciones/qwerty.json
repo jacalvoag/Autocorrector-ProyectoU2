@@ -2,7 +2,7 @@
   "nombre": "QWERTY",
   "filas": [
     {"teclas": "qwertyuiop", "inicio": 0},
-    {"teclas": "asdfghjkl", "inicio": 0.5},
-    {"teclas": "zxcvbnm", "inicio": 1.5}
+    {"teclas": "asdfghjkl", "inicio": 0.25},
+    {"teclas": "zxcvbnm", "inicio": 0.75}
   ]
 }

@@ -2,7 +2,7 @@
   "nombre": "AZERTY",
   "filas": [
     {"teclas": "azertyuiop", "inicio": 0},
-    {"teclas": "qsdfghjklm", "inicio": 0.5},
-    {"teclas": "wxcvbn", "inicio": 1.5}
+    {"teclas": "qsdfghjklm", "inicio": 0.25},
+    {"teclas": "wxcvbn", "inicio": 0.75}
   ]
 }
