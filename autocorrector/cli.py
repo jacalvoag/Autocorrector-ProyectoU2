@@ -31,6 +31,12 @@ def main(argv: list[str] | None = None) -> int:
         help="Presupuesto opcional; puede producir una búsqueda incompleta.",
     )
 
+    parser.add_argument(
+        "--grafo",
+        metavar="ARCHIVO.png",
+        help="Guarda una imagen del árbol de búsqueda (requiere matplotlib).",
+    )
+
     argumentos = parser.parse_args(argv)
 
     if argumentos.teclado == "aleatorio":
@@ -50,11 +56,13 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         inicio = perf_counter()
+        traza = []
         resultado = buscar_correccion(
             argumentos.palabra,
             teclado,
             diccionario,
             max_estados=argumentos.max_estados,
+            traza=traza,
         )
         segundos = perf_counter() - inicio
     except ValueError as error:
@@ -84,6 +92,14 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Estados expandidos: {resultado.expandidos}")
     print(f"Frontera máxima: {resultado.frontera_maxima}")
     print(f"Tiempo de búsqueda: {segundos:.4f} s")
+
+    if argumentos.grafo and resultado.estado != "valida":
+        from pathlib import Path
+
+        from autocorrector.visualizacion import dibujar_busqueda
+
+        Path(argumentos.grafo).write_bytes(dibujar_busqueda(resultado, traza))
+        print(f"Grafo guardado en {argumentos.grafo}")
 
     return 0
 

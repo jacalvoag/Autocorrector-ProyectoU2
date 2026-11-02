@@ -49,7 +49,7 @@ class Vista:
     segundos: float | None
     texto: tuple[str, ...]
     teclas_resaltadas: frozenset[str]
-    grafo: bytes | None = None
+    traza: tuple[Expansion, ...] = ()
 
 
 def validar_palabra(palabra: str) -> str | None:
@@ -76,18 +76,6 @@ def validar_palabra(palabra: str) -> str | None:
         return f"La palabra tiene {len(palabra)} letras; el máximo es 6."
 
     return None
-
-
-def graficar_por_defecto(
-    resultado: Resultado, traza: list[Expansion]
-) -> bytes | None:
-    """Dibuja el árbol de búsqueda; si matplotlib no está, no dibuja nada."""
-    try:
-        from autocorrector.visualizacion import dibujar_busqueda
-    except ImportError:
-        return None
-
-    return dibujar_busqueda(resultado, traza)
 
 
 def letras_sustituidas(resultado: Resultado | None) -> frozenset[str]:
@@ -144,7 +132,6 @@ class Controlador:
         *,
         max_estados: int | None = MAX_ESTADOS,
         buscar: Callable[..., Resultado] = buscar_correccion,
-        graficar: Callable[..., bytes | None] | None = graficar_por_defecto,
     ) -> None:
         if not teclados:
             raise ValueError("Se necesita al menos una distribución.")
@@ -160,7 +147,6 @@ class Controlador:
         self._al_cambiar = al_cambiar
         self._max_estados = max_estados
         self._buscar = buscar
-        self._graficar = graficar
         self._candado = threading.RLock()
 
         self._clave = (
@@ -177,7 +163,7 @@ class Controlador:
         self._tipo_aviso: TipoAviso = "info"
         self._resultado: Resultado | None = None
         self._segundos: float | None = None
-        self._grafo: bytes | None = None
+        self._traza: tuple[Expansion, ...] = ()
         self._texto: list[str] = []
         self._busqueda_actual: Busqueda | None = None
         self._contador = 0
@@ -199,7 +185,7 @@ class Controlador:
                 segundos=self._segundos,
                 texto=tuple(self._texto),
                 teclas_resaltadas=letras_sustituidas(self._resultado),
-                grafo=self._grafo,
+                traza=self._traza,
             )
 
     # Teclados
@@ -338,23 +324,9 @@ class Controlador:
             resultado = None
             error = excepcion
 
-        segundos = perf_counter() - inicio
-        grafo = None
-
-        # El dibujo se hace en este mismo hilo para no congelar la ventana,
-        # y no cuenta en el tiempo de búsqueda.
-        if (
-            self._graficar is not None
-            and resultado is not None
-            and resultado.estado in ("sugerida", "incompleta")
-            and traza
-        ):
-            try:
-                grafo = self._graficar(resultado, traza)
-            except Exception:
-                grafo = None  # Sin dibujo, la corrección sigue siendo válida.
-
-        self.recibir_resultado(busqueda, resultado, segundos, error, grafo)
+        self.recibir_resultado(
+            busqueda, resultado, perf_counter() - inicio, error, tuple(traza)
+        )
 
     def recibir_resultado(
         self,
@@ -362,7 +334,7 @@ class Controlador:
         resultado: Resultado | None,
         segundos: float,
         error: Exception | None = None,
-        grafo: bytes | None = None,
+        traza: tuple[Expansion, ...] = (),
     ) -> bool:
         """Aplica un resultado solo si sigue correspondiendo a la entrada."""
         with self._candado:
@@ -379,7 +351,7 @@ class Controlador:
 
             self._busqueda_actual = None
             self._segundos = segundos
-            self._grafo = grafo
+            self._traza = traza
 
             if error is not None or resultado is None:
                 self._fase = "escribiendo"
@@ -453,7 +425,7 @@ class Controlador:
         self._fase = "escribiendo"
         self._resultado = None
         self._segundos = None
-        self._grafo = None
+        self._traza = ()
 
     def _descartar_pendiente(self) -> bool:
         """Invalida la búsqueda o sugerencia en curso. Indica si había una."""
@@ -462,7 +434,7 @@ class Controlador:
         self._fase = "escribiendo"
         self._resultado = None
         self._segundos = None
-        self._grafo = None
+        self._traza = ()
         return habia
 
     def _avisar(self, mensaje: str, tipo: TipoAviso) -> None:

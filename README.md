@@ -88,9 +88,12 @@ Se abre una ventana de escritorio donde se puede:
   operación y el costo en cada arista y las letras que cambian
   resaltadas. Las letras de las sustituciones también se marcan en el
   teclado.
-- Ver el grafo de la búsqueda: un dibujo hecho con matplotlib con los
-  primeros estados que A* expandió (en gris), la ruta elegida (en azul) y
-  la meta (en verde), con g+h=f en cada nodo. Sale de la traza real de la
+- Recorrer el grafo de la búsqueda de forma interactiva: botones para ir
+  paso a paso, reproducir como animación o saltar al final, y un
+  deslizador. Las palabras aparecen en el orden real en que A* las
+  expandió (la actual en amarillo, las revisadas en gris), al final se
+  resalta el camino elegido hasta la meta, y al hacer clic en un nodo se
+  explica en palabras qué pasó ahí (g, h y f). Sale de la traza real de la
   búsqueda (`buscar_correccion(..., traza=lista)`), no de la ruta final.
 - Aceptar el cambio o rechazarlo para conservar la palabra original.
 
@@ -108,6 +111,7 @@ Desde la raíz del repositorio:
 ```powershell
 python -m autocorrector.cli gstp --teclado qwerty
 python -m autocorrector.cli gatp --teclado aleatorio --semilla 2026
+python -m autocorrector.cli nmovte --teclado qwerty --grafo grafo.png
 python -m unittest discover -s tests -v
 ```
 

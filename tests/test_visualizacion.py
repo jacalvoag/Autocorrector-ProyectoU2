@@ -139,9 +139,8 @@ class TestDibujo(unittest.TestCase):
         self.assertTrue(dibujar_busqueda(resultado, traza).startswith(b"\x89PNG"))
 
 
-@unittest.skipUnless(HAY_MATPLOTLIB, "matplotlib no está instalado")
-class TestGrafoEnControlador(unittest.TestCase):
-    def test_vista_trae_el_grafo(self):
+class TestTrazaEnControlador(unittest.TestCase):
+    def test_vista_trae_la_traza(self):
         from autocorrector.controlador import Controlador
 
         pendientes = []
@@ -155,30 +154,114 @@ class TestGrafoEnControlador(unittest.TestCase):
         vista = controlador.vista()
 
         self.assertEqual(vista.fase, "sugerida")
-        self.assertTrue(vista.grafo.startswith(b"\x89PNG"))
+        self.assertEqual(len(vista.traza), vista.resultado.expandidos)
+        self.assertEqual(vista.traza[0].estado, "gstp")
 
         controlador.aceptar()
-        self.assertIsNone(controlador.vista().grafo)
+        self.assertEqual(controlador.vista().traza, ())
 
-    def test_error_al_dibujar_no_rompe_la_correccion(self):
-        from autocorrector.controlador import Controlador
 
-        def falla(*args):
-            raise RuntimeError("sin dibujo")
+HAY_FLET = importlib.util.find_spec("flet") is not None
 
-        pendientes = []
-        controlador = Controlador(
-            cargar_distribuciones(),
-            cargar_diccionario(),
-            ejecutar=pendientes.append,
-            graficar=falla,
+
+class PaginaFalsa:
+    def __init__(self):
+        self.tareas = []
+
+    def add(self, *controles):
+        pass
+
+    def update(self, *controles):
+        pass
+
+    def run_thread(self, tarea, *args):
+        tarea(*args)
+
+    def run_task(self, tarea, *args):
+        self.tareas.append((tarea, args))
+
+
+@unittest.skipUnless(HAY_FLET, "Flet no está instalado")
+class TestGrafoInteractivo(unittest.TestCase):
+    def setUp(self):
+        from autocorrector.interfaz import GrafoBusqueda
+
+        teclados = cargar_distribuciones()
+        self.traza = []
+        self.resultado = buscar_correccion(
+            "nmovte", teclados["qwerty"], cargar_diccionario(), traza=self.traza
         )
-        controlador.actualizar_entrada("gstp ")
-        pendientes.pop()()
-        vista = controlador.vista()
+        self.pagina = PaginaFalsa()
+        self.grafo = GrafoBusqueda(self.pagina)
+        self.grafo.mostrar(self.resultado, tuple(self.traza))
 
-        self.assertEqual(vista.resultado.sugerencia, "gato")
-        self.assertIsNone(vista.grafo)
+    def tarjetas(self):
+        return [c for c in self.grafo.area.controls if isinstance(c.data, str)]
+
+    def test_empieza_mostrando_el_resultado_final(self):
+        estados = {t.data for t in self.tarjetas()}
+
+        self.assertIn("nombre", estados)
+        self.assertIn("nmovte", estados)
+        self.assertIn("es una palabra válida", self.grafo.explicacion.value)
+
+    def test_paso_a_paso_en_orden_real(self):
+        self.grafo.ir(1)
+        self.assertEqual([t.data for t in self.tarjetas()], ["nmovte"])
+
+        self.grafo.ir(3)
+        esperados = [e.estado for e in self.traza[:3]]
+        self.assertEqual([t.data for t in self.tarjetas()], esperados)
+        self.assertIn(f"Paso {self.traza[2].orden}", self.grafo.explicacion.value)
+
+    def test_los_limites_no_se_salen(self):
+        self.grafo.ir(0)
+        self.assertEqual(self.grafo._paso, 1)
+
+        self.grafo.ir(999)
+        self.assertEqual(self.grafo._paso, len(self.grafo._pasos))
+
+    def test_clic_en_un_nodo_explica_ese_nodo(self):
+        self.grafo.seleccionar("nmobte")
+
+        self.assertIn("«nmobte»", self.grafo.explicacion.value)
+        self.assertIn("cambiar una letra", self.grafo.explicacion.value)
+
+    def test_reproducir_agenda_la_animacion(self):
+        self.grafo._alternar()
+
+        self.assertEqual(len(self.pagina.tareas), 1)
+        self.assertEqual(self.grafo._paso, 0)
+        self.assertEqual(self.grafo.boton_reproducir.content, "Pausar")
+
+        self.grafo._alternar()
+        self.assertEqual(self.grafo.boton_reproducir.content, "Reproducir")
+
+    def test_la_animacion_avanza_hasta_el_final(self):
+        import asyncio
+
+        self.grafo.ir(len(self.grafo._pasos) - 2)
+        self.grafo._reproduciendo = True
+        self.grafo._generacion += 1
+
+        async def sin_espera(segundos):
+            return None
+
+        original = asyncio.sleep
+        asyncio.sleep = sin_espera
+        try:
+            asyncio.run(self.grafo._animar(self.grafo._generacion))
+        finally:
+            asyncio.sleep = original
+
+        self.assertEqual(self.grafo._paso, len(self.grafo._pasos))
+        self.assertFalse(self.grafo._reproduciendo)
+
+    def test_misma_busqueda_conserva_el_paso(self):
+        self.grafo.ir(2)
+        self.grafo.mostrar(self.resultado, tuple(self.traza))
+
+        self.assertEqual(self.grafo._paso, 2)
 
 
 if __name__ == "__main__":
