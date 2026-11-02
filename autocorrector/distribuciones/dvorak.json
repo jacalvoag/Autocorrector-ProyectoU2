@@ -1,0 +1,8 @@
+{
+  "nombre": "Dvorak",
+  "filas": [
+    {"teclas": "---pyfgcrl", "inicio": 0},
+    {"teclas": "aoeuidhtns", "inicio": 0.5},
+    {"teclas": "-qjkxbmwvz", "inicio": 1.5}
+  ]
+}
