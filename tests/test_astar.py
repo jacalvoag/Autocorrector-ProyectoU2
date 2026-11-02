@@ -1,7 +1,14 @@
 import unittest
 from heapq import heappop, heappush
 
-from autocorrector.astar import _sucesores, buscar_correccion
+import random
+
+from autocorrector.astar import (
+    _sucesores,
+    buscar_correccion,
+    heuristica_directa,
+    indice_heuristica,
+)
 from autocorrector.diccionario import cargar_diccionario
 from autocorrector.teclados import cargar_distribuciones
 
@@ -118,6 +125,89 @@ class TestAStar(unittest.TestCase):
                         self.teclados["qwerty"],
                         frozenset({"gato"}),
                     )
+
+
+class TestPropuesta(unittest.TestCase):
+    """Ajustes para que el núcleo coincida con la propuesta registrada."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.teclados = cargar_distribuciones()
+        cls.diccionario = cargar_diccionario()
+        cls.indice = indice_heuristica(cls.diccionario)
+
+    def test_ejemplo_de_la_propuesta(self):
+        vocabulario = frozenset({"gato", "gasto", "gota", "pato"})
+
+        # A "gstp" le faltan la a y la o para formar "gato": h = 2.
+        self.assertEqual(indice_heuristica(vocabulario).calcular("gstp"), 2)
+
+        resultado = buscar_correccion(
+            "gstp", self.teclados["qwerty"], vocabulario
+        )
+        self.assertEqual((resultado.sugerencia, resultado.costo), ("gato", 2))
+
+    def test_no_se_genera_la_palabra_vacia(self):
+        for palabra in ("q", "ab", "gato", "gatito"):
+            with self.subTest(palabra=palabra):
+                destinos = [
+                    destino
+                    for destino, _, _ in _sucesores(
+                        palabra, self.teclados["qwerty"]
+                    )
+                ]
+
+                self.assertNotIn("", destinos)
+                self.assertTrue(all(1 <= len(d) <= 6 for d in destinos))
+
+    def test_indice_coincide_con_la_formula(self):
+        azar = random.Random(2026)
+        letras = "abcdefghijklmnopqrstuvwxyz"
+        estados = [
+            "".join(azar.choice(letras) for _ in range(azar.randint(1, 6)))
+            for _ in range(150)
+        ] + azar.sample(sorted(self.diccionario), 50)
+
+        for estado in estados:
+            with self.subTest(estado=estado):
+                self.assertEqual(
+                    self.indice.calcular(estado),
+                    heuristica_directa(estado, self.diccionario),
+                )
+
+    def test_heuristica_admisible(self):
+        casos = [
+            ("gstp", frozenset({"gato", "gasto", "gota", "pato"})),
+            ("gtao", frozenset({"gato"})),
+            ("perro", frozenset({"pero", "pera"})),
+            ("cssa", frozenset({"casa", "cosa"})),
+            ("al", frozenset({"ala", "sal"})),
+        ]
+
+        for teclado in self.teclados.values():
+            for inicio, metas in casos:
+                with self.subTest(teclado=teclado.nombre, inicio=inicio):
+                    self.assertLessEqual(
+                        indice_heuristica(metas).calcular(inicio),
+                        costo_uniforme(inicio, metas, teclado),
+                    )
+
+    def test_heuristica_consistente(self):
+        teclado = self.teclados["qwerty"]
+
+        for estado in ("gstp", "hoal", "xyzxyz", "q", "cssa", "prro"):
+            for destino, _, costo in _sucesores(estado, teclado):
+                with self.subTest(estado=estado, destino=destino):
+                    self.assertLessEqual(
+                        self.indice.calcular(estado),
+                        costo + self.indice.calcular(destino),
+                    )
+
+    def test_indice_se_construye_una_vez(self):
+        self.assertIs(
+            indice_heuristica(self.diccionario),
+            indice_heuristica(self.diccionario),
+        )
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from functools import lru_cache
 from heapq import heappop, heappush
+from itertools import combinations
 from typing import Literal
 
 from autocorrector.teclados import ALFABETO, Distribucion
@@ -57,12 +58,14 @@ def _sucesores(palabra: str, teclado: Distribucion):
                     generados.add(destino)
                     yield destino, "insercion", 2
 
-    for i in range(len(palabra)):
-        destino = palabra[:i] + palabra[i + 1:]
+    # Los estados tienen de 1 a 6 letras: no se elimina la única letra.
+    if len(palabra) > 1:
+        for i in range(len(palabra)):
+            destino = palabra[:i] + palabra[i + 1:]
 
-        if destino not in generados:
-            generados.add(destino)
-            yield destino, "eliminacion", 2
+            if destino not in generados:
+                generados.add(destino)
+                yield destino, "eliminacion", 2
 
     for i in range(len(palabra) - 1):
         if palabra[i] == palabra[i + 1]:
@@ -78,6 +81,107 @@ def _sucesores(palabra: str, teclado: Distribucion):
         if destino not in generados:
             generados.add(destino)
             yield destino, "intercambio", 1
+
+
+def _submulticonjuntos(palabra: str) -> set[str]:
+    """Todas las combinaciones de letras de la palabra, sin orden."""
+    letras = "".join(sorted(palabra))
+    return {
+        "".join(combinacion)
+        for tamano in range(len(letras) + 1)
+        for combinacion in combinations(letras, tamano)
+    }
+
+
+class IndiceHeuristica:
+    """Calcula la heurística de la propuesta en tiempo constante por estado.
+
+    h(n) = mínimo, sobre todas las palabras w del diccionario, de
+    max(2 * |len(n) - len(w)|, letras de w que faltan en n).
+
+    Las letras faltantes se cuentan con repetición: a "gstp" le faltan
+    la "a" y la "o" para formar "gato". Para una longitud fija de w, faltan
+    len(w) menos las letras que n y w tienen en común, así que basta con
+    conocer el mayor número de letras en común con alguna palabra de esa
+    longitud. El índice guarda, para cada combinación de letras, las
+    longitudes de las palabras que la contienen.
+    """
+
+    def __init__(self, diccionario: frozenset[str]) -> None:
+        self.longitudes = sorted({len(palabra) for palabra in diccionario})
+        self._contenidas: dict[str, int] = {}
+
+        for palabra in diccionario:
+            bit = 1 << len(palabra)
+
+            for combinacion in _submulticonjuntos(palabra):
+                self._contenidas[combinacion] = (
+                    self._contenidas.get(combinacion, 0) | bit
+                )
+
+        self._por_letras = lru_cache(maxsize=200_000)(self._calcular_por_letras)
+
+    def calcular(self, estado: str) -> int:
+        # h solo depende de qué letras tiene el estado, no de su orden.
+        return self._por_letras("".join(sorted(estado)))
+
+    def _calcular_por_letras(self, letras: str) -> int:
+        largo = len(letras)
+        mejor = None
+        pendientes = set(self.longitudes)
+
+        # Se revisan primero las combinaciones más grandes: la primera que
+        # aparece para una longitud es la que más letras comparte.
+        for tamano in range(largo, -1, -1):
+            if mejor is not None and all(
+                max(2 * abs(largo - longitud), longitud - tamano) >= mejor
+                for longitud in pendientes
+            ):
+                break  # Ninguna longitud pendiente puede mejorar el valor.
+
+            for combinacion in set(combinations(letras, tamano)):
+                mascara = self._contenidas.get("".join(combinacion), 0)
+
+                for longitud in [l for l in pendientes if mascara >> l & 1]:
+                    pendientes.discard(longitud)
+                    valor = max(
+                        2 * abs(largo - longitud), longitud - tamano
+                    )
+
+                    if mejor is None or valor < mejor:
+                        mejor = valor
+
+            if not pendientes:
+                break
+
+        return mejor if mejor is not None else 0
+
+
+@lru_cache(maxsize=4)
+def indice_heuristica(diccionario: frozenset[str]) -> IndiceHeuristica:
+    """Construye el índice una sola vez por diccionario."""
+    return IndiceHeuristica(diccionario)
+
+
+def heuristica_directa(estado: str, diccionario: frozenset[str]) -> int:
+    """Fórmula de la propuesta aplicada palabra por palabra (para pruebas)."""
+
+    def faltantes(meta: str) -> int:
+        restantes = list(estado)
+        cuenta = 0
+
+        for letra in meta:
+            if letra in restantes:
+                restantes.remove(letra)
+            else:
+                cuenta += 1
+
+        return cuenta
+
+    return min(
+        max(2 * abs(len(estado) - len(meta)), faltantes(meta))
+        for meta in diccionario
+    )
 
 
 def _reconstruir(meta: str, anteriores: dict[str, Paso]) -> tuple[Paso, ...]:
@@ -110,32 +214,7 @@ def buscar_correccion(
     if palabra in diccionario:
         return Resultado("valida", palabra, palabra, 0, (), 0, 0)
 
-    # Se agrupan metas con las mismas letras, sin considerar su orden.
-    firmas = {"".join(sorted(meta)) for meta in diccionario}
-    firmas_sin_una: dict[int, set[str]] = {}
-
-    for firma in firmas:
-        indice = firmas_sin_una.setdefault(len(firma), set())
-
-        for i in range(len(firma)):
-            indice.add(firma[:i] + firma[i + 1:])
-
-    @lru_cache(maxsize=100_000)
-    def heuristica(estado: str) -> int:
-        firma = "".join(sorted(estado))
-
-        if firma in firmas:
-            return 0
-
-        indice = firmas_sin_una.get(len(firma), set())
-
-        if any(
-            firma[:i] + firma[i + 1:] in indice
-            for i in range(len(firma))
-        ):
-            return 1
-
-        return 2
+    heuristica = indice_heuristica(diccionario).calcular
 
     # La cola prioriza f, luego g y finalmente la palabra.
     frontera: list[tuple[int, int, str]] = [
