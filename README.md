@@ -18,12 +18,14 @@ acepta el reemplazo.
 
 - Núcleo: distribuciones, diccionario, búsqueda A*, pruebas y ejecución
   por consola.
-- Interfaz: aplicación Flet y conexión con el núcleo terminado.
+- Interfaz: aplicación Flet (`autocorrector/interfaz.py`), estado de la
+  interacción (`autocorrector/controlador.py`) y sus pruebas
+  (`tests/test_interfaz.py`).
 
 ## Estado
 
-Proyecto en desarrollo. Cada módulo se integrará cuando tenga sus
-pruebas y pueda ejecutarse.
+El núcleo y la interfaz Flet están integrados. Los puntos pendientes
+y las diferencias con la propuesta están en `docs/revision_propuesta.md`.
 
 ## Diccionario
 
@@ -54,6 +56,46 @@ Modificaciones realizadas: selección de formas verificadas por es_MX,
 exclusión de ñ y otros caracteres fuera del alfabeto acordado,
 eliminación de tildes, límite de seis letras, eliminación de duplicados
 y orden alfabético.
+
+## Instalación
+
+Desde la raíz del repositorio, con Python 3.12:
+
+```powershell
+python -m pip install -r requirements.txt
+```
+
+## Ejecutar la interfaz gráfica
+
+```powershell
+python -m autocorrector.interfaz
+```
+
+Se abre una ventana de escritorio donde se puede:
+
+- Elegir QWERTY, AZERTY, Dvorak o cualquier otro JSON que se agregue a
+  `autocorrector/distribuciones/`.
+- Generar un teclado aleatorio. La interfaz muestra la semilla que se usó;
+  con ella se puede repetir la misma distribución desde la consola
+  (`--teclado aleatorio --semilla N`).
+- Escribir con el teclado físico o con las teclas en pantalla, que se
+  dibujan en las posiciones de la distribución activa. Al pasar el cursor
+  sobre una tecla se ven sus vecinas.
+- Presionar espacio para revisar la palabra. Si no está en el
+  diccionario se muestra la sugerencia, el costo, la ruta de operaciones,
+  los estados expandidos, la frontera máxima y el tiempo. La ruta se
+  dibuja como una cadena de estados desde el inicio hasta la meta, con la
+  operación y el costo en cada arista y las letras que cambian
+  resaltadas. Las letras de las sustituciones también se marcan en el
+  teclado.
+- Aceptar el cambio o rechazarlo para conservar la palabra original.
+
+La búsqueda corre en un hilo aparte con un presupuesto de 400,000 estados
+(`MAX_ESTADOS` en `autocorrector/controlador.py`). Si se agota, la
+interfaz lo indica y no presenta la palabra como corrección óptima. Si
+la palabra o el teclado cambian mientras se busca, el resultado anterior
+se descarta. La elección del presupuesto y la revisión contra la
+propuesta están en `docs/revision_propuesta.md`.
 
 ## Probar el agente
 
