@@ -443,6 +443,24 @@ class Aplicacion:
             color=TEXTO_SECUNDARIO,
         )
         self.nota_resultado = ft.Text(size=13, color=TEXTO_SECUNDARIO)
+        self.titulo_grafo = ft.Text(
+            "Cómo buscó A* (grafo de la búsqueda)",
+            size=13,
+            weight=ft.FontWeight.BOLD,
+            color=TEXTO_SECUNDARIO,
+        )
+        self.imagen_grafo = ft.Image(
+            src=b"",
+            fit=ft.BoxFit.CONTAIN,
+            border_radius=8,
+        )
+        self.caja_grafo = ft.Container(
+            padding=8,
+            border_radius=10,
+            bgcolor=SUPERFICIE,
+            border=ft.Border.all(1, BORDE),
+            content=ft.Column([self.titulo_grafo, self.imagen_grafo], spacing=8),
+        )
         self.boton_aceptar = ft.FilledButton(
             content="Aceptar",
             icon=ft.Icons.CHECK,
@@ -469,6 +487,7 @@ class Aplicacion:
             self.titulo_ruta,
             self.ruta,
             self.nota_resultado,
+            self.caja_grafo,
             ft.Row([self.boton_aceptar, self.boton_rechazar], spacing=10),
         )
         return self.panel_resultado
@@ -662,6 +681,10 @@ class Aplicacion:
             self.boton_rechazar.content = "Conservar original"
 
         self.metricas.controls = [costo, expandidos, frontera, duracion]
+
+        self.caja_grafo.visible = vista.grafo is not None
+        if vista.grafo is not None:
+            self.imagen_grafo.src = vista.grafo
 
 
 def main(page: ft.Page) -> None:

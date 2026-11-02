@@ -16,6 +16,22 @@ class Paso:
 
 
 @dataclass(frozen=True)
+class Expansion:
+    """Un estado que A* sacó de la frontera, en el orden en que lo hizo.
+
+    Sirve para dibujar el recorrido real de la búsqueda: no se reconstruye
+    a partir de la ruta final.
+    """
+
+    orden: int
+    estado: str
+    padre: str | None
+    operacion: str | None
+    g: int
+    h: int
+
+
+@dataclass(frozen=True)
 class Resultado:
     estado: Literal["valida", "sugerida", "incompleta"]
     original: str
@@ -202,7 +218,13 @@ def buscar_correccion(
     diccionario: frozenset[str],
     *,
     max_estados: int | None = None,
+    traza: list[Expansion] | None = None,
 ) -> Resultado:
+    """Busca con A* la corrección de menor costo.
+
+    Si se pasa una lista en ``traza``, se agrega un ``Expansion`` por cada
+    estado expandido, en orden. No cambia el resultado de la búsqueda.
+    """
     _validar_entrada(palabra)
 
     if not diccionario:
@@ -252,6 +274,19 @@ def buscar_correccion(
             continue
 
         expandidos += 1
+
+        if traza is not None:
+            llegada = anteriores.get(estado)
+            traza.append(
+                Expansion(
+                    expandidos,
+                    estado,
+                    llegada.origen if llegada else None,
+                    llegada.operacion if llegada else None,
+                    g,
+                    heuristica(estado),
+                )
+            )
 
         for destino, operacion, costo in _sucesores(estado, teclado):
             nuevo_g = g + costo

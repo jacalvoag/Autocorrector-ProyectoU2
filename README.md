@@ -88,6 +88,10 @@ Se abre una ventana de escritorio donde se puede:
   operación y el costo en cada arista y las letras que cambian
   resaltadas. Las letras de las sustituciones también se marcan en el
   teclado.
+- Ver el grafo de la búsqueda: un dibujo hecho con matplotlib con los
+  primeros estados que A* expandió (en gris), la ruta elegida (en azul) y
+  la meta (en verde), con g+h=f en cada nodo. Sale de la traza real de la
+  búsqueda (`buscar_correccion(..., traza=lista)`), no de la ruta final.
 - Aceptar el cambio o rechazarlo para conservar la palabra original.
 
 La búsqueda corre en un hilo aparte con un presupuesto de 200,000 estados
