@@ -82,8 +82,11 @@ Se abre una ventana de escritorio donde se puede:
   sobre una tecla se ven sus vecinas.
 - Presionar espacio para revisar la palabra. Si no está en el
   diccionario se muestra la sugerencia, el costo, la ruta de operaciones,
-  los estados expandidos, la frontera máxima y el tiempo. Las letras de
-  las sustituciones se resaltan en el teclado.
+  los estados expandidos, la frontera máxima y el tiempo. La ruta se
+  dibuja como una cadena de estados desde el inicio hasta la meta, con la
+  operación y el costo en cada arista y las letras que cambian
+  resaltadas. Las letras de las sustituciones también se marcan en el
+  teclado.
 - Aceptar el cambio o rechazarlo para conservar la palabra original.
 
 La búsqueda corre en un hilo aparte con un presupuesto de 400,000 estados

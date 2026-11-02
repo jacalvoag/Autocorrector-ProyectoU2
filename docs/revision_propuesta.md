@@ -31,6 +31,7 @@ Estados usados: **Cumple**, **Pendiente** (falta hacerlo) y
 | 17 | Diccionario y teclados se cargan una sola vez | Se cargan en `Aplicacion.__init__` | `buscar_correccion` reconstruye el índice de la heurística con todo el diccionario en cada llamada; convendría hacerlo una vez | José | Pendiente |
 | 18 | Métricas de rendimiento visibles | Costo, estados expandidos, frontera máxima y tiempo en la CLI y en la interfaz | La comparación con costo uniforme solo existe en una prueba. Para la exposición convendría mostrarla en la interfaz o en la CLI | Rafael / José | Pendiente |
 | 19 | Visualización del recorrido de búsqueda (PNG o animación) | No existe | Queda fuera del alcance inicial. Si se hace, debe salir de los eventos reales de A* y separar estados explorados de la ruta final | Por definir | Pendiente |
+| 20 | Las posiciones de las teclas representan el teclado real | En `qwerty.json` la tercera fila empieza en 1.5 y la segunda en 0.5. Con eso la V queda justo debajo de la G y la B no cuenta como vecina de la G (distancia al cuadrado 2 > 1.25). En un teclado físico la fila de abajo se desplaza cerca de media tecla, y G tiene como vecinas a V y B | Revisar los desplazamientos (`inicio`) de QWERTY, AZERTY y Dvorak contra un teclado real y ajustar las pruebas de vecindad | José | Discrepa |
 
 ## Presupuesto de búsqueda (`max_estados`)
 
@@ -61,7 +62,7 @@ presupuesto se puede reducir.
 
 ## Pendientes antes de fusionar
 
-- José: corregir el punto 6, decidir el punto 7 y, si es posible, el 17.
+- José: corregir los puntos 6 y 20, decidir el punto 7 y, si es posible, el 17.
 - Rafael y José: probar el flujo completo en Windows con Python 3.12 y
   Flet 1.0.5 y repetir la medición del presupuesto.
 - Revisar juntos el pull request antes de fusionar.
