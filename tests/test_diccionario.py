@@ -6,12 +6,11 @@ from autocorrector.diccionario import cargar_diccionario
 
 
 class TestDiccionario(unittest.TestCase):
-    def test_carga_lista_fija(self) -> None:
+    def test_carga_diccionario_generado(self) -> None:
         palabras = cargar_diccionario()
 
-        self.assertEqual(len(palabras), 160)
         self.assertIn("gato", palabras)
-        self.assertIn("tecla", palabras)
+        self.assertIn("casa", palabras)
         self.assertNotIn("gatp", palabras)
 
     def test_rechaza_palabra_repetida(self) -> None:

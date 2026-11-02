@@ -27,8 +27,30 @@ pruebas y pueda ejecutarse.
 
 ## Diccionario
 
-`autocorrector/datos/palabras.txt` contiene 160 palabras seleccionadas
-para el alcance académico del proyecto. Solo admite letras minúsculas
-`a-z` y palabras de hasta seis letras. Por esta simplificación, palabras
-que normalmente llevan tilde se escriben sin ella. La lista es fija
-durante cada ejecución y se puede ampliar mediante un cambio versionado.
+El archivo `autocorrector/datos/palabras.txt` se genera con
+`scripts/generar_diccionario.py`. Incluye formas del vocabulario español de
+wordfreq 3.1.1 verificadas con el diccionario ortográfico es_MX de
+LibreOffice. Se conservan únicamente palabras de 1 a 6 letras dentro del
+alfabeto a-z; las tildes se eliminan y las palabras con ñ se excluyen.
+
+El archivo generado queda versionado y se utiliza sin conexión a internet.
+Su cobertura depende de las fuentes; no se presenta como una lista de todas
+las palabras existentes en español.
+
+# Fuentes del diccionario
+
+- Diccionario ortográfico español de México (`es_MX.aff` y `es_MX.dic`):
+  proyecto RLA-ES, distribuido por LibreOffice. Autor inicial:
+  Santiago Bosio y colaboradores.
+  https://github.com/LibreOffice/dictionaries/tree/master/es
+  La licencia original se conserva en `es_MX/LICENSE.md`.
+
+- Candidatos de palabras: `wordfreq` 3.1.1, de Robyn Speer.
+  https://github.com/rspeer/wordfreq
+  Sus datos se distribuyen bajo CC BY-SA 4.0; consultar el NOTICE del
+  proyecto: https://github.com/rspeer/wordfreq/blob/master/NOTICE.md
+
+Modificaciones realizadas: selección de formas verificadas por es_MX,
+exclusión de ñ y otros caracteres fuera del alfabeto acordado,
+eliminación de tildes, límite de seis letras, eliminación de duplicados
+y orden alfabético.
