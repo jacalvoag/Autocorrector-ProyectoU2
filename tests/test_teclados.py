@@ -34,6 +34,41 @@ class TestTeclados(unittest.TestCase):
         self.assertFalse(qwerty.son_vecinas("q", "p"))
         self.assertFalse(qwerty.son_vecinas("a", "a"))
 
+    def test_vecindad_segun_la_propuesta(self) -> None:
+        # Diferencia de fila y de columna como máximo 1, con diagonales,
+        # sobre el desplazamiento real de las filas del teclado.
+        def vecinas(clave: str, letra: str) -> set[str]:
+            teclado = self.distribuciones[clave]
+            return {
+                otra for otra in ALFABETO if teclado.son_vecinas(letra, otra)
+            }
+
+        self.assertEqual(vecinas("qwerty", "g"), set("tyfhvb"))
+        self.assertEqual(vecinas("qwerty", "s"), set("weadzx"))
+        self.assertEqual(vecinas("azerty", "s"), set("zeqdwx"))
+        self.assertEqual(vecinas("dvorak", "g"), set("fcdh"))
+        self.assertFalse(
+            self.distribuciones["qwerty"].son_vecinas("g", "c")
+        )
+
+    def test_tabla_de_cercanias(self) -> None:
+        for distribucion in self.distribuciones.values():
+            tabla = distribucion.cercanias
+
+            with self.subTest(distribucion=distribucion.nombre):
+                self.assertEqual(set(tabla), set(ALFABETO))
+
+                for letra, vecinas in tabla.items():
+                    self.assertNotIn(letra, vecinas)
+
+                    for otra in vecinas:
+                        self.assertIn(letra, tabla[otra])
+
+        aleatoria = generar_aleatoria(self.distribuciones["qwerty"], 7)
+        self.assertNotEqual(
+            aleatoria.cercanias, self.distribuciones["qwerty"].cercanias
+        )
+
     def test_aleatoria_conserva_letras_y_posiciones(self) -> None:
         base = self.distribuciones["qwerty"]
         primera = generar_aleatoria(base, semilla=2026)

@@ -17,7 +17,7 @@ from autocorrector.teclados import ALFABETO, Distribucion, generar_aleatoria
 
 # Elegido midiendo palabras con uno y dos errores al azar en los tres
 # teclados y uno aleatorio. Detalle en docs/revision_propuesta.md.
-MAX_ESTADOS = 400_000
+MAX_ESTADOS = 200_000
 CLAVE_ALEATORIA = "aleatoria"
 TECLADO_BASE_ALEATORIO = "qwerty"
 

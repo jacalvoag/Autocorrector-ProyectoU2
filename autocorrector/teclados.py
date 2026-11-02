@@ -1,16 +1,23 @@
 import json
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 ALFABETO = "abcdefghijklmnopqrstuvwxyz"
-DISTANCIA_VECINA_CUADRADA = 1.25
+# Según la propuesta, dos teclas son vecinas si su diferencia de fila y
+# de columna es como máximo 1, lo que incluye las diagonales.
+DIFERENCIA_MAXIMA_VECINA = 1.0
 
 
 @dataclass(frozen=True)
 class Distribucion:
     nombre: str
     posiciones: dict[str, tuple[float, float]]
+    # Tabla de cercanías: para cada letra, las letras vecinas. Se genera
+    # una vez a partir de las posiciones y el agente solo la consulta.
+    cercanias: dict[str, frozenset[str]] = field(
+        init=False, repr=False, compare=False
+    )
 
     def __post_init__(self) -> None:
         if set(self.posiciones) != set(ALFABETO):
@@ -21,15 +28,30 @@ class Distribucion:
         if len(set(self.posiciones.values())) != 26:
             raise ValueError("Dos letras ocupan la misma posición.")
 
+        object.__setattr__(
+            self, "cercanias", generar_tabla_cercanias(self.posiciones)
+        )
+
     def son_vecinas(self, primera: str, segunda: str) -> bool:
-        if primera == segunda:
-            return False
+        return segunda in self.cercanias[primera]
 
-        x1, y1 = self.posiciones[primera]
-        x2, y2 = self.posiciones[segunda]
 
-        distancia_cuadrada = (x1 - x2) ** 2 + (y1 - y2) ** 2
-        return distancia_cuadrada <= DISTANCIA_VECINA_CUADRADA
+def generar_tabla_cercanias(
+    posiciones: dict[str, tuple[float, float]],
+) -> dict[str, frozenset[str]]:
+    """Vecinas de cada letra: diferencia de fila y de columna de 1 o menos."""
+    tabla: dict[str, frozenset[str]] = {}
+
+    for letra, (x1, y1) in posiciones.items():
+        tabla[letra] = frozenset(
+            otra
+            for otra, (x2, y2) in posiciones.items()
+            if otra != letra
+            and abs(x1 - x2) <= DIFERENCIA_MAXIMA_VECINA
+            and abs(y1 - y2) <= DIFERENCIA_MAXIMA_VECINA
+        )
+
+    return tabla
 
 
 def cargar_distribucion(ruta: Path) -> Distribucion:

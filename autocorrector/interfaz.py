@@ -20,7 +20,7 @@ from autocorrector.controlador import (
     posiciones_cambiadas,
 )
 from autocorrector.diccionario import cargar_diccionario
-from autocorrector.teclados import ALFABETO, Distribucion, cargar_distribuciones
+from autocorrector.teclados import Distribucion, cargar_distribuciones
 
 TAM_TECLA = 46
 SEPARACION = 6
@@ -56,7 +56,7 @@ FUENTES_RESPALDO = ["Courier New", "monospace"]
 
 
 def vecinas(teclado: Distribucion, letra: str) -> list[str]:
-    return [otra for otra in ALFABETO if teclado.son_vecinas(letra, otra)]
+    return sorted(teclado.cercanias[letra])
 
 
 # Piezas visuales reutilizables

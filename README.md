@@ -90,7 +90,7 @@ Se abre una ventana de escritorio donde se puede:
   teclado.
 - Aceptar el cambio o rechazarlo para conservar la palabra original.
 
-La búsqueda corre en un hilo aparte con un presupuesto de 400,000 estados
+La búsqueda corre en un hilo aparte con un presupuesto de 200,000 estados
 (`MAX_ESTADOS` en `autocorrector/controlador.py`). Si se agota, la
 interfaz lo indica y no presenta la palabra como corrección óptima. Si
 la palabra o el teclado cambian mientras se busca, el resultado anterior
