@@ -246,11 +246,11 @@ class Aplicacion:
             ventana.min_width = 760
 
         page.add(
-            self._encabezado(),
             ft.Container(
                 padding=ft.Padding.symmetric(vertical=20, horizontal=24),
                 content=ft.Column(
                     [
+                        self._encabezado(),
                         ft.ResponsiveRow(
                             [self._tarjeta_teclado(), self._tarjeta_palabra()],
                             spacing=20,
@@ -265,23 +265,17 @@ class Aplicacion:
         )
 
     def _encabezado(self) -> ft.Container:
-        self.etiqueta_teclado = ft.Text(size=13, color=SUPERFICIE, weight=ft.FontWeight.W_600)
-        return ft.Container(
-            padding=ft.Padding.symmetric(vertical=18, horizontal=24),
-            gradient=ft.LinearGradient(
-                begin=ft.Alignment.CENTER_LEFT,
-                end=ft.Alignment.CENTER_RIGHT,
-                colors=[ft.Colors.BLUE_900, ft.Colors.BLUE_700],
-            ),
-            content=ft.Row(
+        self.etiqueta_teclado = ft.Text(size=13, color=PRIMARIO, weight=ft.FontWeight.W_600)
+        return tarjeta(
+            ft.Row(
                 [
                     ft.Container(
                         width=44,
                         height=44,
                         border_radius=10,
-                        bgcolor=ft.Colors.with_opacity(0.15, SUPERFICIE),
+                        bgcolor=PRIMARIO_SUAVE,
                         alignment=ft.Alignment.CENTER,
-                        content=ft.Icon(ft.Icons.SPELLCHECK, color=SUPERFICIE, size=26),
+                        content=ft.Icon(ft.Icons.SPELLCHECK, color=PRIMARIO, size=26),
                     ),
                     ft.Column(
                         [
@@ -289,13 +283,13 @@ class Aplicacion:
                                 "Autocorrector con A*",
                                 size=22,
                                 weight=ft.FontWeight.BOLD,
-                                color=SUPERFICIE,
+                                color=PRIMARIO,
                             ),
                             ft.Text(
                                 "f(n) = g(n) + h(n)   ·   el costo de cada cambio "
                                 "depende de la cercanía de las teclas",
                                 size=13,
-                                color=ft.Colors.BLUE_100,
+                                color=TEXTO_SECUNDARIO,
                             ),
                         ],
                         spacing=2,
@@ -304,13 +298,15 @@ class Aplicacion:
                     ft.Container(
                         padding=ft.Padding.symmetric(vertical=6, horizontal=12),
                         border_radius=20,
-                        border=ft.Border.all(1, ft.Colors.with_opacity(0.5, SUPERFICIE)),
+                        bgcolor=PRIMARIO_SUAVE,
+                        border=ft.Border.all(1, BORDE),
                         content=ft.Row(
                             [
-                                ft.Icon(ft.Icons.KEYBOARD, color=SUPERFICIE, size=16),
+                                ft.Icon(ft.Icons.KEYBOARD, color=PRIMARIO, size=16),
                                 self.etiqueta_teclado,
                             ],
                             spacing=6,
+                            tight=True,
                         ),
                     ),
                 ],
@@ -331,13 +327,6 @@ class Aplicacion:
             ]
             + [ft.DropdownOption(key=CLAVE_ALEATORIA, text="Aleatoria")],
             on_select=self._al_elegir_teclado,
-        )
-        self.campo_semilla = ft.TextField(
-            label="Semilla",
-            width=120,
-            dense=True,
-            hint_text="Opcional",
-            keyboard_type=ft.KeyboardType.NUMBER,
         )
         self.boton_generar = ft.OutlinedButton(
             content="Generar aleatorio",
@@ -362,7 +351,7 @@ class Aplicacion:
         return tarjeta(
             titulo_seccion(ft.Icons.KEYBOARD, "Teclado"),
             ft.Row(
-                [self.selector, self.campo_semilla, self.boton_generar],
+                [self.selector, self.boton_generar],
                 wrap=True,
                 spacing=10,
                 run_spacing=10,
@@ -512,19 +501,7 @@ class Aplicacion:
             self._tecla(lambda: self.controlador.seleccionar_teclado(clave))
 
     def _al_generar(self, e: ft.Event | None) -> None:
-        texto = (self.campo_semilla.value or "").strip()
-        semilla = None
-
-        if texto:
-            if not texto.isdigit():
-                self.campo_semilla.error = "Usa un entero de 0 en adelante"
-                self.page.update()
-                return
-
-            semilla = int(texto)
-
-        self.campo_semilla.error = None
-        self._tecla(lambda: self.controlador.generar_aleatorio(semilla))
+        self._tecla(self.controlador.generar_aleatorio)
 
     def _tecla(self, accion) -> None:
         accion()
@@ -551,9 +528,11 @@ class Aplicacion:
         self.selector.value = vista.clave_teclado
         self.etiqueta_teclado.value = vista.teclado.nombre
         if vista.semilla is not None:
-            self.campo_semilla.value = str(vista.semilla)
+            # La semilla se muestra para poder repetir la distribución,
+            # por ejemplo con: python -m autocorrector.cli gstp
+            # --teclado aleatorio --semilla N
             self.texto_teclado.value = (
-                "Escribe la misma semilla para repetir esta distribución. "
+                f"Semilla de esta distribución: {vista.semilla}. "
                 "Pasa el cursor sobre una tecla para ver sus vecinas."
             )
         else:

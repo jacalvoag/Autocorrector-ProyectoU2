@@ -75,8 +75,9 @@ Se abre una ventana de escritorio donde se puede:
 
 - Elegir QWERTY, AZERTY, Dvorak o cualquier otro JSON que se agregue a
   `autocorrector/distribuciones/`.
-- Generar un teclado aleatorio. Si se escribe una semilla, se repite la
-  misma distribución; si se deja vacía, se genera una y se muestra.
+- Generar un teclado aleatorio. La interfaz muestra la semilla que se usó;
+  con ella se puede repetir la misma distribución desde la consola
+  (`--teclado aleatorio --semilla N`).
 - Escribir con el teclado físico o con las teclas en pantalla, que se
   dibujan en las posiciones de la distribución activa. Al pasar el cursor
   sobre una tecla se ven sus vecinas.

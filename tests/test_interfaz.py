@@ -406,12 +406,13 @@ class TestVistaFlet(unittest.TestCase):
         teclas = {tecla.data: tecla for tecla in self.app.teclado.controls}
         self.assertEqual(teclas["g"].bgcolor, teclas["q"].bgcolor)
 
-    def test_semilla_invalida_se_avisa(self):
-        self.app.campo_semilla.value = "abc"
+    def test_generar_aleatorio_muestra_la_semilla(self):
         self.app._al_generar(None)
+        vista = self.app.controlador.vista()
 
-        self.assertIsNotNone(self.app.campo_semilla.error)
-        self.assertEqual(self.app.controlador.vista().clave_teclado, "qwerty")
+        self.assertEqual(vista.clave_teclado, "aleatoria")
+        self.assertIn(str(vista.semilla), self.app.texto_teclado.value)
+        self.assertEqual(self.app.selector.value, "aleatoria")
 
 
 if __name__ == "__main__":
