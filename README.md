@@ -63,3 +63,29 @@ Desde la raíz del repositorio:
 python -m autocorrector.cli gstp --teclado qwerty
 python -m autocorrector.cli gatp --teclado aleatorio --semilla 2026
 python -m unittest discover -s tests -v
+```
+
+La consola muestra sugerencia, costo, ruta, estados expandidos,
+frontera máxima y tiempo. El estado `incompleta` no garantiza
+una sugerencia óptima.
+
+## Contrato para la interfaz Flet
+
+La interfaz carga una vez los teclados con `cargar_distribuciones()` y
+las palabras con `cargar_diccionario()`. Al terminar una palabra con
+espacio, elimina ese espacio y llama a:
+
+```python
+buscar_correccion(palabra, teclado, diccionario, max_estados=...)
+```
+
+El resultado tiene `estado`, `sugerencia`, `costo`, `ruta`,
+`expandidos` y `frontera_maxima`:
+
+- `valida`: conserva la palabra; A* no se ejecutó.
+- `sugerida`: muestra la sugerencia y espera Aceptar o Rechazar.
+- `incompleta`: informa que no hay una sugerencia óptima garantizada.
+
+La búsqueda debe ejecutarse fuera del manejador de entrada. La
+interfaz asociará cada resultado con la palabra y distribución que
+originaron esa búsqueda para ignorar respuestas tardías.
