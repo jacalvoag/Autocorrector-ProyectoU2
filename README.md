@@ -24,3 +24,11 @@ acepta el reemplazo.
 
 Proyecto en desarrollo. Cada módulo se integrará cuando tenga sus
 pruebas y pueda ejecutarse.
+
+## Diccionario
+
+`autocorrector/datos/palabras.txt` contiene 160 palabras seleccionadas
+para el alcance académico del proyecto. Solo admite letras minúsculas
+`a-z` y palabras de hasta seis letras. Por esta simplificación, palabras
+que normalmente llevan tilde se escriben sin ella. La lista es fija
+durante cada ejecución y se puede ampliar mediante un cambio versionado.
