@@ -10,9 +10,13 @@ visualizadores de búsqueda en grafos. Solo se muestran datos que devuelve
 el núcleo; no se reconstruye ni se inventa el recorrido.
 """
 
-import flet as ft
+import asyncio
 
-from autocorrector.astar import Paso
+import flet as ft
+import flet.canvas as cv
+
+from autocorrector.arbol import Nodo, pasos, posiciones, seleccionar_nodos
+from autocorrector.astar import Expansion, Paso, Resultado
 from autocorrector.controlador import (
     CLAVE_ALEATORIA,
     Controlador,
@@ -212,6 +216,338 @@ def ficha_palabra(palabra: str) -> ft.Container:
         content=ft.Text(palabra, size=15, color=PRIMARIO, weight=ft.FontWeight.W_500),
         data=palabra,
     )
+
+
+# Grafo interactivo de la búsqueda
+
+ANCHO_NODO = 160
+ALTO_NODO = 54
+COLUMNA = 240
+FILA = 64
+LIMITE_GRAFO = 7
+GRIS_FONDO = ft.Colors.BLUE_GREY_50
+GRIS_BORDE = ft.Colors.BLUE_GREY_200
+ACCION_SIMPLE = {
+    "sustitucion": "cambiar una letra",
+    "insercion": "agregar una letra",
+    "eliminacion": "quitar una letra",
+    "intercambio": "voltear dos letras",
+}
+
+
+class GrafoBusqueda:
+    """Árbol de búsqueda que se recorre paso a paso o como animación.
+
+    Muestra los estados en el orden real en que A* los expandió (la traza
+    de la búsqueda) y, al final, resalta el camino elegido hasta la meta.
+    """
+
+    def __init__(self, page: ft.Page) -> None:
+        self.page = page
+        self._resultado: Resultado | None = None
+        self._total_expandidos = 0
+        self._nodos: dict[str, Nodo] = {}
+        self._lugar: dict[str, tuple[int, float]] = {}
+        self._pasos: list[Nodo] = []
+        self._paso = 0
+        self._seleccion: str | None = None
+        self._reproduciendo = False
+        self._generacion = 0
+
+        self.lienzo = cv.Canvas(shapes=[])
+        self.area = ft.Stack()
+        self.boton_inicio = ft.IconButton(
+            ft.Icons.FIRST_PAGE, tooltip="Volver al inicio", on_click=lambda e: self.ir(1)
+        )
+        self.boton_atras = ft.IconButton(
+            ft.Icons.CHEVRON_LEFT, tooltip="Paso anterior",
+            on_click=lambda e: self.ir(self._paso - 1),
+        )
+        self.boton_reproducir = ft.FilledButton(
+            content="Reproducir", icon=ft.Icons.PLAY_ARROW, on_click=self._alternar
+        )
+        self.boton_adelante = ft.IconButton(
+            ft.Icons.CHEVRON_RIGHT, tooltip="Paso siguiente",
+            on_click=lambda e: self.ir(self._paso + 1),
+        )
+        self.boton_final = ft.IconButton(
+            ft.Icons.LAST_PAGE, tooltip="Ver el resultado final",
+            on_click=lambda e: self.ir(len(self._pasos)),
+        )
+        self.deslizador = ft.Slider(
+            min=1, max=2, value=2, expand=True, active_color=PRIMARIO,
+            on_change=lambda e: self.ir(int(e.control.value)),
+        )
+        self.contador = ft.Text(size=13, color=TEXTO_SECUNDARIO)
+        self.explicacion = ft.Text(size=16, color=ft.Colors.BLUE_GREY_900, expand=True)
+        self.caja_explicacion = ft.Container(
+            padding=14,
+            border_radius=8,
+            bgcolor=PRIMARIO_SUAVE,
+            border=ft.Border.only(left=ft.BorderSide(4, PRIMARIO)),
+            content=ft.Row(
+                [ft.Icon(ft.Icons.LIGHTBULB_OUTLINE, color=PRIMARIO), self.explicacion],
+                spacing=10,
+                vertical_alignment=ft.CrossAxisAlignment.START,
+            ),
+        )
+        self.desplazable = ft.Column([self.area], scroll=ft.ScrollMode.AUTO, height=460)
+
+        self.contenedor = ft.Container(
+            padding=16,
+            border_radius=12,
+            bgcolor=FONDO,
+            border=ft.Border.all(1, BORDE),
+            content=ft.Column(
+                [
+                    ft.Row(
+                        [
+                            ft.Icon(ft.Icons.ACCOUNT_TREE_OUTLINED, color=PRIMARIO),
+                            ft.Text("Así buscó A*", size=16, weight=ft.FontWeight.BOLD, color=PRIMARIO),
+                        ],
+                        spacing=8,
+                    ),
+                    ft.Row(
+                        [
+                            self.boton_inicio,
+                            self.boton_atras,
+                            self.boton_reproducir,
+                            self.boton_adelante,
+                            self.boton_final,
+                            self.deslizador,
+                        ],
+                        spacing=4,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    ),
+                    self.contador,
+                    ft.Row(
+                        [
+                            muestra(RESALTE, RESALTE_BORDE, "Revisando ahora"),
+                            muestra(GRIS_FONDO, GRIS_BORDE, "Ya revisada"),
+                            muestra(SUPERFICIE, PRIMARIO, "Camino elegido"),
+                            muestra(ft.Colors.GREEN_50, EXITO, "Meta"),
+                        ],
+                        wrap=True,
+                        spacing=16,
+                    ),
+                    ft.Row([self.desplazable], scroll=ft.ScrollMode.AUTO),
+                    self.caja_explicacion,
+                ],
+                spacing=10,
+            ),
+        )
+
+    # Datos
+
+    def mostrar(self, resultado: Resultado, traza: tuple[Expansion, ...]) -> None:
+        """Carga una búsqueda nueva; si es la misma, conserva el paso actual."""
+        if resultado is self._resultado:
+            return
+
+        self.detener()
+        self._resultado = resultado
+        self.contenedor.visible = bool(traza)
+
+        if not traza:
+            return
+
+        self._total_expandidos = len(traza)
+        self._nodos = seleccionar_nodos(resultado, traza, LIMITE_GRAFO)
+        self._lugar = posiciones(self._nodos)
+        self._pasos = pasos(self._nodos)
+        self._paso = len(self._pasos)
+        self._seleccion = None
+
+        columnas = max(c for c, _ in self._lugar.values()) + 1
+        filas = max(f for _, f in self._lugar.values()) + 1
+        ancho = int((columnas - 1) * COLUMNA + ANCHO_NODO + 8)
+        alto = int((filas - 1) * FILA + ALTO_NODO + 8)
+        self.area.width = ancho
+        self.area.height = alto
+        self.lienzo.width = ancho
+        self.lienzo.height = alto
+        self.desplazable.height = min(alto, 460)
+        self.deslizador.max = max(2, len(self._pasos))
+        self.deslizador.divisions = max(1, len(self._pasos) - 1)
+        self._dibujar()
+
+    # Navegación
+
+    def ir(self, paso: int) -> None:
+        if not self._pasos:
+            return
+
+        self._paso = max(1, min(paso, len(self._pasos)))
+        self._seleccion = None
+        self._dibujar()
+        self.page.update()
+
+    def seleccionar(self, estado: str) -> None:
+        self._seleccion = estado
+        self._dibujar()
+        self.page.update()
+
+    def detener(self) -> None:
+        self._reproduciendo = False
+        self._generacion += 1
+        self.boton_reproducir.content = "Reproducir"
+        self.boton_reproducir.icon = ft.Icons.PLAY_ARROW
+
+    def _alternar(self, e=None) -> None:
+        if self._reproduciendo:
+            self.detener()
+            self.page.update()
+            return
+
+        if self._paso >= len(self._pasos):
+            self._paso = 0
+
+        self._reproduciendo = True
+        self._generacion += 1
+        self.boton_reproducir.content = "Pausar"
+        self.boton_reproducir.icon = ft.Icons.PAUSE
+        self.page.run_task(self._animar, self._generacion)
+
+    async def _animar(self, generacion: int) -> None:
+        while (
+            self._reproduciendo
+            and generacion == self._generacion
+            and self._paso < len(self._pasos)
+        ):
+            self._paso += 1
+            self._seleccion = None
+            self._dibujar()
+            self.page.update()
+            await asyncio.sleep(0.9)
+
+        if generacion == self._generacion:
+            self.detener()
+            self.page.update()
+
+    # Dibujo
+
+    def _dibujar(self) -> None:
+        if not self._pasos:
+            return
+
+        paso = max(1, self._paso)
+        visibles = self._pasos[:paso]
+        visibles_ids = {n.estado for n in visibles}
+        actual = visibles[-1]
+        final = paso == len(self._pasos)
+        destacado = self._seleccion or actual.estado
+
+        lineas = []
+        etiquetas = []
+        for nodo in visibles:
+            if nodo.padre not in visibles_ids:
+                continue
+
+            c1, f1 = self._lugar[nodo.padre]
+            c2, f2 = self._lugar[nodo.estado]
+            x1, y1 = c1 * COLUMNA + ANCHO_NODO, f1 * FILA + ALTO_NODO / 2
+            x2, y2 = c2 * COLUMNA, f2 * FILA + ALTO_NODO / 2
+            camino = final and nodo.tipo in ("ruta", "meta")
+            lineas.append(
+                cv.Line(
+                    x1, y1, x2, y2,
+                    paint=ft.Paint(
+                        color=PRIMARIO if camino else GRIS_BORDE,
+                        stroke_width=4 if camino else 2,
+                    ),
+                )
+            )
+
+            if camino:
+                costo = nodo.g - self._nodos[nodo.padre].g
+                etiquetas.append(
+                    ft.Container(
+                        left=(x1 + x2) / 2 - 18,
+                        top=(y1 + y2) / 2 - 28,
+                        padding=ft.Padding.symmetric(horizontal=6, vertical=1),
+                        border_radius=8,
+                        bgcolor=PRIMARIO,
+                        content=ft.Text(f"+{costo}", size=12, color=SUPERFICIE, weight=ft.FontWeight.BOLD),
+                    )
+                )
+
+        self.lienzo.shapes = lineas
+        tarjetas = [self._tarjeta(n, n.estado == actual.estado, final, n.estado == destacado)
+                    for n in visibles]
+        self.area.controls = [self.lienzo, *tarjetas, *etiquetas]
+
+        self.deslizador.value = paso
+        self.contador.value = (
+            f"Paso {paso} de {len(self._pasos)}. A* revisó {self._total_expandidos:,} "
+            "palabras en total; aquí se ven las primeras y el camino final."
+        )
+        self.explicacion.value = self._explicar(self._nodos[destacado], final)
+
+    def _tarjeta(self, nodo: Nodo, es_actual: bool, final: bool, destacado: bool) -> ft.Container:
+        if final and nodo.tipo == "meta":
+            fondo, borde = ft.Colors.GREEN_50, EXITO
+        elif final and nodo.tipo in ("ruta", "inicio"):
+            fondo, borde = SUPERFICIE, PRIMARIO
+        elif es_actual:
+            fondo, borde = RESALTE, RESALTE_BORDE
+        elif nodo.tipo == "inicio":
+            fondo, borde = PRIMARIO_SUAVE, PRIMARIO
+        else:
+            fondo, borde = GRIS_FONDO, GRIS_BORDE
+
+        columna, fila = self._lugar[nodo.estado]
+        return ft.Container(
+            left=columna * COLUMNA,
+            top=fila * FILA,
+            width=ANCHO_NODO,
+            height=ALTO_NODO,
+            border_radius=12,
+            bgcolor=fondo,
+            border=ft.Border.all(3 if destacado else 2, ft.Colors.BLUE_GREY_900 if destacado else borde),
+            alignment=ft.Alignment.CENTER,
+            tooltip="Clic para ver qué pasó aquí",
+            on_click=lambda e, estado=nodo.estado: self.seleccionar(estado),
+            data=nodo.estado,
+            content=ft.Column(
+                [
+                    ft.Text(nodo.estado, size=17, weight=ft.FontWeight.BOLD,
+                            font_family=FUENTE_PALABRA, font_family_fallback=FUENTES_RESPALDO),
+                    ft.Text(f"g {nodo.g} + h {nodo.h} = f {nodo.f}", size=11, color=TEXTO_SECUNDARIO),
+                ],
+                spacing=0,
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                alignment=ft.MainAxisAlignment.CENTER,
+            ),
+        )
+
+    def _explicar(self, nodo: Nodo, final: bool) -> str:
+        if nodo.tipo == "inicio":
+            return (
+                f"A* empieza en «{nodo.estado}», lo que escribiste. Todavía no hay "
+                f"cambios (g = 0) y estima que faltan al menos {nodo.h} (h = {nodo.h})."
+            )
+
+        padre = self._nodos.get(nodo.padre)
+        costo = nodo.g - padre.g if padre else nodo.g
+        accion = ACCION_SIMPLE.get(nodo.operacion or "", "un cambio")
+
+        if nodo.tipo == "meta":
+            return (
+                f"«{nodo.estado}» es una palabra válida. Se llega desde «{nodo.padre}» al "
+                f"{accion} (+{costo}). Costo total: {nodo.g}. No quedaba ninguna opción "
+                "con f menor, así que es la corrección más barata."
+            )
+
+        texto = (
+            f"Paso {nodo.orden}: A* revisa «{nodo.estado}». Viene de «{nodo.padre}» al "
+            f"{accion} (+{costo}). Lleva g = {nodo.g}, le faltan al menos h = {nodo.h}, "
+            f"así que f = {nodo.f}."
+        )
+        if final and nodo.tipo == "ruta":
+            texto += " Forma parte del camino elegido."
+        elif nodo.tipo == "explorado":
+            texto += " No llevó a una corrección más barata, así que se descartó."
+        return texto
 
 
 class Aplicacion:
@@ -443,6 +779,7 @@ class Aplicacion:
             color=TEXTO_SECUNDARIO,
         )
         self.nota_resultado = ft.Text(size=13, color=TEXTO_SECUNDARIO)
+        self.grafo = GrafoBusqueda(self.page)
         self.boton_aceptar = ft.FilledButton(
             content="Aceptar",
             icon=ft.Icons.CHECK,
@@ -469,6 +806,7 @@ class Aplicacion:
             self.titulo_ruta,
             self.ruta,
             self.nota_resultado,
+            self.grafo.contenedor,
             ft.Row([self.boton_aceptar, self.boton_rechazar], spacing=10),
         )
         return self.panel_resultado
@@ -612,6 +950,7 @@ class Aplicacion:
         self.panel_resultado.visible = visible
 
         if not visible:
+            self.grafo.detener()
             return
 
         tiempo = f"{vista.segundos:.3f} s" if vista.segundos is not None else "-"
@@ -662,6 +1001,7 @@ class Aplicacion:
             self.boton_rechazar.content = "Conservar original"
 
         self.metricas.controls = [costo, expandidos, frontera, duracion]
+        self.grafo.mostrar(resultado, vista.traza)
 
 
 def main(page: ft.Page) -> None:

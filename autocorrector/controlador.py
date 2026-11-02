@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from time import perf_counter
 from typing import Literal
 
-from autocorrector.astar import Paso, Resultado, buscar_correccion
+from autocorrector.astar import Expansion, Paso, Resultado, buscar_correccion
 from autocorrector.teclados import ALFABETO, Distribucion, generar_aleatoria
 
 # Elegido midiendo palabras con uno y dos errores al azar en los tres
@@ -49,6 +49,7 @@ class Vista:
     segundos: float | None
     texto: tuple[str, ...]
     teclas_resaltadas: frozenset[str]
+    traza: tuple[Expansion, ...] = ()
 
 
 def validar_palabra(palabra: str) -> str | None:
@@ -162,6 +163,7 @@ class Controlador:
         self._tipo_aviso: TipoAviso = "info"
         self._resultado: Resultado | None = None
         self._segundos: float | None = None
+        self._traza: tuple[Expansion, ...] = ()
         self._texto: list[str] = []
         self._busqueda_actual: Busqueda | None = None
         self._contador = 0
@@ -183,6 +185,7 @@ class Controlador:
                 segundos=self._segundos,
                 texto=tuple(self._texto),
                 teclas_resaltadas=letras_sustituidas(self._resultado),
+                traza=self._traza,
             )
 
     # Teclados
@@ -306,6 +309,7 @@ class Controlador:
 
     def _correr_busqueda(self, busqueda: Busqueda) -> None:
         inicio = perf_counter()
+        traza: list[Expansion] = []
 
         try:
             resultado = self._buscar(
@@ -313,13 +317,16 @@ class Controlador:
                 busqueda.teclado,
                 self.diccionario,
                 max_estados=self._max_estados,
+                traza=traza,
             )
             error = None
         except Exception as excepcion:  # El hilo no debe morir en silencio.
             resultado = None
             error = excepcion
 
-        self.recibir_resultado(busqueda, resultado, perf_counter() - inicio, error)
+        self.recibir_resultado(
+            busqueda, resultado, perf_counter() - inicio, error, tuple(traza)
+        )
 
     def recibir_resultado(
         self,
@@ -327,6 +334,7 @@ class Controlador:
         resultado: Resultado | None,
         segundos: float,
         error: Exception | None = None,
+        traza: tuple[Expansion, ...] = (),
     ) -> bool:
         """Aplica un resultado solo si sigue correspondiendo a la entrada."""
         with self._candado:
@@ -343,6 +351,7 @@ class Controlador:
 
             self._busqueda_actual = None
             self._segundos = segundos
+            self._traza = traza
 
             if error is not None or resultado is None:
                 self._fase = "escribiendo"
@@ -416,6 +425,7 @@ class Controlador:
         self._fase = "escribiendo"
         self._resultado = None
         self._segundos = None
+        self._traza = ()
 
     def _descartar_pendiente(self) -> bool:
         """Invalida la búsqueda o sugerencia en curso. Indica si había una."""
@@ -424,6 +434,7 @@ class Controlador:
         self._fase = "escribiendo"
         self._resultado = None
         self._segundos = None
+        self._traza = ()
         return habia
 
     def _avisar(self, mensaje: str, tipo: TipoAviso) -> None:

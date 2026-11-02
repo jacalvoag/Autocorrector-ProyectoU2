@@ -31,7 +31,7 @@ Estados usados: **Cumple**, **Pendiente** (falta hacerlo) y
 | 16 | La búsqueda corre fuera del manejador de entrada y se ignoran resultados viejos | `page.run_thread`; cada búsqueda guarda número, palabra y teclado. `test_resultado_tardio_tras_cambiar_palabra`, `test_resultado_tardio_tras_cambiar_teclado`, `test_busqueda_vieja_no_pisa_a_la_nueva` | `buscar_correccion` no se puede cancelar; un resultado viejo se ignora, pero su hilo sigue hasta terminar o agotar el presupuesto | Rafael / José | Cumple (ver ajuste) |
 | 17 | Diccionario, teclados e índice de la heurística se preparan una sola vez | La interfaz carga diccionario y teclados en `Aplicacion.__init__`; `indice_heuristica` guarda el índice por diccionario (0.26 s la primera vez). `test_indice_se_construye_una_vez` | Ninguno | José / Rafael | Cumple |
 | 18 | Métricas de rendimiento visibles | Costo, estados expandidos, frontera máxima y tiempo en la CLI y en la interfaz | La comparación con costo uniforme solo existe en una prueba. Para la exposición convendría mostrarla en la interfaz o en la CLI | Rafael / José | Pendiente |
-| 19 | Visualización del recorrido de búsqueda (PNG o animación) | No existe | Queda fuera del alcance inicial. Si se hace, debe salir de los eventos reales de A* y separar estados explorados de la ruta final | Por definir | Pendiente |
+| 19 | Visualización del recorrido de búsqueda | `buscar_correccion` acepta `traza` y agrega un `Expansion` por cada estado expandido. `arbol.py` elige y acomoda los nodos; la interfaz los muestra en un grafo interactivo (paso a paso, animación, clic en un nodo) y `visualizacion.py` exporta la misma figura a PNG con matplotlib (`cli.py --grafo`). `tests/test_visualizacion.py` | Ninguno | Rafael | Cumple |
 | 20 | Las posiciones de las teclas representan el teclado real | Las filas empiezan en 0, 0.25 y 0.75 en QWERTY, AZERTY y Dvorak, como en un teclado físico. En QWERTY la G tiene como vecinas a T, Y, F, H, V y B | Ninguno. Antes las filas empezaban en 0, 0.5 y 1.5 y la B no contaba como vecina de la G | José / Rafael | Cumple |
 
 ## Presupuesto de búsqueda (`max_estados`)
@@ -67,4 +67,3 @@ en `controlador.py`.
   las teclas).
 - Punto 18: decidir si se muestra la comparación con costo uniforme en la
   interfaz o en la CLI para la exposición.
-- Punto 19: la visualización animada sigue fuera del alcance inicial.
