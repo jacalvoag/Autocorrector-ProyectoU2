@@ -2,10 +2,12 @@ import importlib.util
 import unittest
 
 from autocorrector.astar import buscar_correccion
+from autocorrector.astar import Paso
 from autocorrector.controlador import (
     CLAVE_ALEATORIA,
     Controlador,
     letras_sustituidas,
+    posiciones_cambiadas,
     validar_palabra,
 )
 from autocorrector.diccionario import cargar_diccionario
@@ -284,6 +286,18 @@ class TestAuxiliares(unittest.TestCase):
         self.assertEqual(letras_sustituidas(resultado), set("saop"))
         self.assertEqual(letras_sustituidas(None), frozenset())
 
+    def test_posiciones_cambiadas(self):
+        casos = {
+            Paso("gstp", "gatp", "sustitucion", 1): ({1}, {1}),
+            Paso("hoal", "hola", "intercambio", 1): ({2, 3}, {2, 3}),
+            Paso("gto", "gato", "insercion", 2): (set(), {1}),
+            Paso("gatos", "gato", "eliminacion", 2): ({4}, set()),
+        }
+
+        for paso, (origen, destino) in casos.items():
+            with self.subTest(paso=paso):
+                self.assertEqual(posiciones_cambiadas(paso), (origen, destino))
+
 
 class PaginaFalsa:
     """Lo mínimo de ft.Page que usa la aplicación, sin abrir ventana."""
@@ -339,7 +353,9 @@ class TestVistaFlet(unittest.TestCase):
         self.app.boton_aceptar.on_click(None)
 
         self.assertFalse(self.app.panel_resultado.visible)
-        self.assertEqual(self.app.texto_escrito.value, "gato")
+        self.assertEqual(
+            [ficha.data for ficha in self.app.texto_escrito.controls], ["gato"]
+        )
         self.assertEqual(self.app.campo.value, "")
         self.assertTrue(self.pagina.tareas)  # Se regresó el foco al campo.
 
@@ -350,6 +366,45 @@ class TestVistaFlet(unittest.TestCase):
 
         self.assertEqual(self.app.selector.value, "dvorak")
         self.assertEqual(teclas["a"].left, dvorak["a"][0] * 52)
+
+    def test_ruta_se_dibuja_como_cadena_de_nodos(self):
+        self.app.controlador.actualizar_entrada("gstp ")
+        ruta = self.app.controlador.vista().resultado.ruta
+
+        # inicio + (arista + nodo) por cada paso
+        self.assertEqual(len(self.app.ruta.controls), 1 + 2 * len(ruta))
+        self.assertEqual(len(self.app.metricas.controls), 4)
+
+    def test_incompleta_oculta_ruta_y_aceptar(self):
+        from autocorrector.controlador import Busqueda
+        from autocorrector.astar import Resultado
+
+        controlador = self.app.controlador
+        controlador._contador += 1
+        controlador._palabra = "xyzxyz"
+        busqueda = Busqueda(controlador._contador, "xyzxyz", controlador.vista().teclado)
+        controlador._busqueda_actual = busqueda
+        controlador._fase = "buscando"
+        controlador.recibir_resultado(
+            busqueda, Resultado("incompleta", "xyzxyz", None, None, (), 10, 99), 0.1
+        )
+
+        self.assertTrue(self.app.panel_resultado.visible)
+        self.assertFalse(self.app.boton_aceptar.visible)
+        self.assertFalse(self.app.titulo_ruta.visible)
+        self.assertEqual(self.app.ruta.controls, [])
+
+    def test_senalar_tecla_resalta_vecinas(self):
+        self.app._al_senalar("g", True)
+        teclas = {tecla.data: tecla for tecla in self.app.teclado.controls}
+
+        self.assertNotEqual(teclas["g"].bgcolor, teclas["q"].bgcolor)
+        self.assertEqual(teclas["f"].bgcolor, teclas["h"].bgcolor)
+        self.assertNotEqual(teclas["f"].bgcolor, teclas["q"].bgcolor)
+
+        self.app._al_senalar("g", False)
+        teclas = {tecla.data: tecla for tecla in self.app.teclado.controls}
+        self.assertEqual(teclas["g"].bgcolor, teclas["q"].bgcolor)
 
     def test_semilla_invalida_se_avisa(self):
         self.app.campo_semilla.value = "abc"

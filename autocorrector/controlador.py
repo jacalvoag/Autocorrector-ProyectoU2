@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from time import perf_counter
 from typing import Literal
 
-from autocorrector.astar import Resultado, buscar_correccion
+from autocorrector.astar import Paso, Resultado, buscar_correccion
 from autocorrector.teclados import ALFABETO, Distribucion, generar_aleatoria
 
 # Elegido midiendo palabras con uno y dos errores al azar en los tres
@@ -93,6 +93,32 @@ def letras_sustituidas(resultado: Resultado | None) -> frozenset[str]:
                 letras.update((antes, despues))
 
     return frozenset(letras)
+
+
+def posiciones_cambiadas(paso: Paso) -> tuple[frozenset[int], frozenset[int]]:
+    """Índices que cambian en el origen y en el destino de un paso.
+
+    Sirve para resaltar en la interfaz qué letra se sustituyó, insertó,
+    eliminó o intercambió.
+    """
+    origen, destino = paso.origen, paso.destino
+
+    if len(origen) == len(destino):
+        distintos = frozenset(
+            i for i, (a, b) in enumerate(zip(origen, destino)) if a != b
+        )
+        return distintos, distintos
+
+    corto, largo = sorted((origen, destino), key=len)
+    i = next(
+        (i for i, (a, b) in enumerate(zip(corto, largo)) if a != b),
+        len(corto),
+    )
+
+    if len(destino) > len(origen):
+        return frozenset(), frozenset({i})
+
+    return frozenset({i}), frozenset()
 
 
 class Controlador:
