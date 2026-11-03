@@ -322,6 +322,18 @@ class PaginaFalsa:
 
 @unittest.skipUnless(HAY_FLET, "Flet no está instalado")
 class TestVistaFlet(unittest.TestCase):
+
+    def test_hover_conserva_la_tecla_para_el_click(self):
+        tecla = next(t for t in self.app.teclado.controls if t.data == "g")
+
+        self.app._al_senalar("g", True)
+
+        misma = next(t for t in self.app.teclado.controls if t.data == "g")
+        self.assertIs(misma, tecla)
+
+        tecla.on_click(None)
+        self.assertEqual(self.app.controlador.vista().palabra, "g")
+
     def setUp(self):
         from autocorrector.interfaz import Aplicacion
 

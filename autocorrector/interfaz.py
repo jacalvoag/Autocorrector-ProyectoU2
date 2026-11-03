@@ -849,13 +849,31 @@ class Aplicacion:
     def _pulsar_letra(self, letra: str) -> None:
         self._tecla(lambda: self.controlador.pulsar_tecla(letra))
 
+    def _estilo_tecla(self, letra: str, vista: Vista):
+        if letra == self.tecla_senalada:
+            return PRIMARIO, PRIMARIO, SUPERFICIE
+        if letra in vista.teclas_resaltadas:
+            return RESALTE, RESALTE_BORDE, ft.Colors.BLUE_GREY_900
+        if (
+            self.tecla_senalada is not None
+            and letra in vista.teclado.cercanias[self.tecla_senalada]
+        ):
+            return PRIMARIO_SUAVE, BORDE_TECLA, PRIMARIO
+        return SUPERFICIE, BORDE_TECLA, ft.Colors.BLUE_GREY_900
+
     def _al_senalar(self, letra: str, dentro) -> None:
         if dentro in (True, "true"):
             self.tecla_senalada = letra
         elif self.tecla_senalada == letra:
             self.tecla_senalada = None
 
-        self._dibujar_teclado(self.controlador.vista())
+        vista = self.controlador.vista()
+        for tecla in self.teclado.controls:
+            fondo, borde, color = self._estilo_tecla(tecla.data, vista)
+            tecla.bgcolor = fondo
+            tecla.border = ft.Border.all(1, borde)
+            tecla.content.color = color
+
         self.page.update()
 
     # Dibujo
@@ -901,21 +919,12 @@ class Aplicacion:
         posiciones = teclado.posiciones
         ancho = max(x for x, _ in posiciones.values()) + 1
         alto = max(y for _, y in posiciones.values()) + 1
-        senalada = self.tecla_senalada
-        cercanas = set(vecinas(teclado, senalada)) if senalada else set()
 
         teclas = []
         for letra in sorted(posiciones):
             x, y = posiciones[letra]
 
-            if letra == senalada:
-                fondo, borde, color = PRIMARIO, PRIMARIO, SUPERFICIE
-            elif letra in vista.teclas_resaltadas:
-                fondo, borde, color = RESALTE, RESALTE_BORDE, ft.Colors.BLUE_GREY_900
-            elif letra in cercanas:
-                fondo, borde, color = PRIMARIO_SUAVE, BORDE_TECLA, PRIMARIO
-            else:
-                fondo, borde, color = SUPERFICIE, BORDE_TECLA, ft.Colors.BLUE_GREY_900
+            fondo, borde, color = self._estilo_tecla(letra, vista)
 
             teclas.append(
                 ft.Container(
