@@ -43,6 +43,8 @@ class Resultado:
     # Palabras del diccionario alcanzables con el costo mínimo, de la
     # preferida a la menos preferida, con su frecuencia (0 si no hay).
     empates: tuple[tuple[str, float], ...] = ()
+    # Combinaciones de letras que el límite de niveles descartó sin explorar.
+    podados: int = 0
 
 
 def _validar_entrada(palabra: str) -> None:
@@ -289,6 +291,7 @@ def buscar_correccion(
     costo_meta: int | None = None
     expandidos = 0
     frontera_maxima = 1
+    podados = 0
 
     while frontera:
         f, g, estado, nivel = heappop(frontera)
@@ -345,6 +348,7 @@ def buscar_correccion(
             if limitar:
                 # En el último nivel solo sirve una palabra del diccionario.
                 if nuevo_nivel == max_niveles and destino not in diccionario:
+                    podados += 1
                     continue
 
                 if any(
@@ -358,6 +362,7 @@ def buscar_correccion(
                 # Cada operación cuesta 2 como máximo: si faltan al menos
                 # h de costo, hacen falta al menos h/2 operaciones.
                 if (nuevo_h + 1) // 2 > max_niveles - nuevo_nivel:
+                    podados += 1
                     continue
             else:
                 if nuevo_g >= mejor_g.get((destino, 0), float("inf")):
@@ -410,6 +415,8 @@ def buscar_correccion(
                 (),
                 expandidos,
                 frontera_maxima,
+                (),
+                podados,
             )
 
         raise RuntimeError("No se encontró una palabra alcanzable.")
@@ -426,4 +433,5 @@ def buscar_correccion(
             (meta, frecuencias.get(meta, 0))
             for meta in sorted(empatadas, key=preferencia)
         ),
+        podados,
     )

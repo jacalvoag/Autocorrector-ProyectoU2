@@ -81,3 +81,19 @@ def cargar_diccionario(
         raise ValueError("El diccionario está vacío.")
 
     return Diccionario(palabras, frecuencias)
+
+
+def probabilidades(zipfs: list[float]) -> list[float]:
+    """Probabilidad relativa de uso de cada palabra frente a las demás.
+
+    La escala Zipf es logarítmica (cada punto es 10 veces más uso), así que
+    primero se vuelve a apariciones por mil millones y luego se reparte el
+    100 % entre las palabras comparadas.
+    """
+    usos = [10**zipf for zipf in zipfs]
+    total = sum(usos)
+
+    if total <= 0:
+        return [1 / len(zipfs)] * len(zipfs) if zipfs else []
+
+    return [uso / total for uso in usos]

@@ -25,7 +25,7 @@ from autocorrector.controlador import (
     posiciones_cambiadas,
     texto_cambios,
 )
-from autocorrector.diccionario import cargar_diccionario
+from autocorrector.diccionario import cargar_diccionario, probabilidades
 from autocorrector.teclados import Distribucion, cargar_distribuciones
 
 TAM_TECLA = 46
@@ -242,11 +242,12 @@ def casilla_cambio(numero: int, estado: str) -> ft.Container:
 
 
 ANCHO_BARRA = 240
-ZIPF_MAXIMO = 8.0
 
 
-def barra_frecuencia(palabra: str, frecuencia: float, elegida: bool) -> ft.Row:
-    """Fila con una barra proporcional a la frecuencia de la palabra."""
+def barra_frecuencia(
+    palabra: str, frecuencia: float, probabilidad: float, elegida: bool
+) -> ft.Row:
+    """Fila con una barra proporcional a la probabilidad de uso de la palabra."""
     return ft.Row(
         [
             ft.Text(
@@ -257,13 +258,14 @@ def barra_frecuencia(palabra: str, frecuencia: float, elegida: bool) -> ft.Row:
                 color=EXITO if elegida else PRIMARIO,
             ),
             ft.Container(
-                width=max(4.0, ANCHO_BARRA * min(frecuencia, ZIPF_MAXIMO) / ZIPF_MAXIMO),
+                width=max(4.0, ANCHO_BARRA * probabilidad),
                 height=16,
                 border_radius=4,
                 bgcolor=EXITO if elegida else GRIS_BORDE,
             ),
             ft.Text(
-                f"{frecuencia:.2f}" + ("  elegida" if elegida else ""),
+                f"{probabilidad:.0%}  (frecuencia {frecuencia:.2f})"
+                + ("  <- elegida" if elegida else ""),
                 size=12,
                 color=EXITO if elegida else TEXTO_SECUNDARIO,
                 weight=ft.FontWeight.BOLD if elegida else ft.FontWeight.NORMAL,
@@ -281,7 +283,8 @@ ALTO_NODO = 54
 COLUMNA = 240
 FILA = 64
 ENCABEZADO = 34  # Alto de la fila con «Nivel 1 de 3», «Nivel 2 de 3»...
-MAX_EMPATES_EN_ARBOL = 3
+MAX_EMPATES_EN_ARBOL = 4  # Con la elegida son las 5 más frecuentes.
+MAX_EMPATES_EN_PANEL = 5
 LIMITE_GRAFO = 7
 GRIS_FONDO = ft.Colors.BLUE_GREY_50
 GRIS_BORDE = ft.Colors.BLUE_GREY_200
@@ -309,6 +312,7 @@ class GrafoBusqueda:
         self._max_niveles: int | None = None
         self._columnas = 1
         self._perdedoras: list[tuple[str, float]] = []
+        self._probabilidad: dict[str, float] = {}
         self._frecuencia: dict[str, float] = {}
         self._pasos: list[Nodo] = []
         self._paso = 0
@@ -426,6 +430,10 @@ class GrafoBusqueda:
         self._seleccion = None
         self._max_niveles = max_niveles
         self._frecuencia = dict(resultado.empates)
+        mostradas = resultado.empates[: 1 + MAX_EMPATES_EN_ARBOL]
+        self._probabilidad = dict(
+            zip((p for p, _ in mostradas), probabilidades([f for _, f in mostradas]))
+        )
         # Palabras que cuestan lo mismo que la elegida y perdieron por frecuencia.
         self._perdedoras = list(resultado.empates[1:1 + MAX_EMPATES_EN_ARBOL])
 
@@ -573,11 +581,13 @@ class GrafoBusqueda:
             return ""
 
         otras = ", ".join(
-            f"«{p}» ({f:.2f})" for p, f in self._perdedoras
+            f"«{p}» ({self._probabilidad.get(p, 0):.0%})"
+            for p, _ in self._perdedoras
         )
         return (
             f" Empató en costo con {otras}, pero «{meta}» "
-            f"({self._frecuencia[meta]:.2f}) es más usada y por eso se eligió."
+            f"({self._probabilidad.get(meta, 0):.0%} de probabilidad de uso entre "
+            "las más frecuentes) es la más usada y por eso se eligió."
         )
 
     def _encabezados(self) -> list[ft.Control]:
@@ -642,7 +652,7 @@ class GrafoBusqueda:
                         [
                             ft.Text(palabra, size=17, weight=ft.FontWeight.BOLD, color=TEXTO_SECUNDARIO),
                             ft.Text(
-                                f"empate de costo {meta.g} · frecuencia {frecuencia:.2f}",
+                                f"costo {meta.g} · prob. {self._probabilidad.get(palabra, 0):.0%} · frec. {frecuencia:.2f}",
                                 size=11,
                                 color=TEXTO_SECUNDARIO,
                             ),
@@ -690,7 +700,7 @@ class GrafoBusqueda:
                     *(
                         [
                             ft.Text(
-                                f"frecuencia {self._frecuencia[nodo.estado]:.2f}",
+                                f"prob. {self._probabilidad.get(nodo.estado, 1):.0%} · frec. {self._frecuencia[nodo.estado]:.2f}",
                                 size=11,
                                 color=EXITO,
                                 weight=ft.FontWeight.BOLD,
@@ -978,6 +988,7 @@ class Aplicacion:
             color=TEXTO_SECUNDARIO,
         )
         self.nota_resultado = ft.Text(size=13, color=TEXTO_SECUNDARIO)
+        self.bloque_resumen = ft.Column(spacing=8)
         self.bloque_limite = ft.Column(spacing=8)
         self.bloque_empates = ft.Column(spacing=8)
         self.boton_comparar = ft.OutlinedButton(
@@ -1012,6 +1023,7 @@ class Aplicacion:
             self.titulo_ruta,
             self.ruta,
             self.nota_resultado,
+            self.bloque_resumen,
             self.bloque_limite,
             self.bloque_empates,
             self.grafo.contenedor,
@@ -1169,6 +1181,70 @@ class Aplicacion:
         self.teclado.width = ancho * PASO
         self.teclado.height = alto * PASO
 
+    def _dibujar_resumen(self, vista: Vista, resultado: Resultado) -> None:
+        """Lo que se pidió explicar de la búsqueda: meta, heurística y desempate."""
+        h_inicio = vista.traza[0].h if vista.traza else None
+        lineas = [
+            (
+                "Meta",
+                f"cualquier palabra del diccionario ({len(self.controlador.diccionario):,} "
+                "palabras), no una sola conocida. A* se detiene al llegar a la primera "
+                "de menor costo.",
+            ),
+            (
+                "Heurística h",
+                "estima cuánto falta contando las letras que le faltan a la palabra "
+                "para parecerse a alguna del diccionario; nunca sobreestima, por eso "
+                "el resultado es el de costo mínimo."
+                + (
+                    f" Aquí h(«{resultado.original}») = {h_inicio}."
+                    if h_inicio is not None
+                    else ""
+                ),
+            ),
+            (
+                "Costos",
+                "cambiar por tecla vecina 1, por una no vecina 2, insertar o "
+                "eliminar 2, voltear dos letras contiguas 1. Las vecinas salen de "
+                f"las posiciones del teclado {vista.teclado.nombre}.",
+            ),
+        ]
+
+        if resultado.estado == "sugerida":
+            desempate = (
+                f"{len(resultado.empates)} palabras costaban lo mismo; "
+                "se optó por la más frecuente."
+                if len(resultado.empates) > 1
+                else "no hubo empate de costo."
+            )
+            lineas.append(("Desempate", desempate))
+
+        self.bloque_resumen.controls = [
+            ft.Container(
+                padding=14,
+                border_radius=10,
+                bgcolor=SUPERFICIE,
+                border=ft.Border.all(1, BORDE),
+                content=ft.Column(
+                    [
+                        ft.Text("Cómo decidió A*", size=13, weight=ft.FontWeight.BOLD, color=TEXTO_SECUNDARIO),
+                        *[
+                            ft.Text(
+                                spans=[
+                                    ft.TextSpan(f"{titulo}: ", ft.TextStyle(weight=ft.FontWeight.BOLD, color=PRIMARIO)),
+                                    ft.TextSpan(texto),
+                                ],
+                                size=13,
+                                color=ft.Colors.BLUE_GREY_900,
+                            )
+                            for titulo, texto in lineas
+                        ],
+                    ],
+                    spacing=6,
+                ),
+            )
+        ]
+
     def _dibujar_limite(self, vista: Vista, resultado: Resultado) -> None:
         """Cuántos cambios usó la corrección y cuántos permitía el límite."""
         limite = vista.max_niveles
@@ -1192,7 +1268,9 @@ class Aplicacion:
             casillas = [casilla_cambio(n, e) for n, e in enumerate(estados, 1)]
             explicacion = (
                 f"A* no revisa palabras que necesiten más de {texto_cambios(limite)}: "
-                "corta esas ramas y por eso explora menos estados."
+                "corta esas ramas y por eso explora menos estados. "
+                f"El límite descartó {resultado.podados:,} combinaciones de letras "
+                "sin explorarlas."
             )
 
         controles: list[ft.Control] = [
@@ -1260,7 +1338,7 @@ class Aplicacion:
 
     def _dibujar_empates(self, resultado: Resultado) -> None:
         """Palabras de igual costo con su frecuencia; gana la más usada."""
-        candidatas = resultado.empates[:6]
+        candidatas = resultado.empates[:MAX_EMPATES_EN_PANEL]
 
         if not candidatas:
             return
@@ -1274,12 +1352,15 @@ class Aplicacion:
         else:
             cabecera = (
                 f"{len(resultado.empates)} palabras cuestan lo mismo "
-                f"({resultado.costo}). Desempata la frecuencia: gana la más usada."
+                f"({resultado.costo}). Aquí están las {len(candidatas)} más "
+                "usadas con su probabilidad relativa de uso; se optó por la "
+                "de mayor probabilidad."
             )
 
+        probs = probabilidades([f for _, f in candidatas])
         filas = [
-            barra_frecuencia(palabra, frecuencia, palabra == resultado.sugerencia)
-            for palabra, frecuencia in candidatas
+            barra_frecuencia(palabra, frecuencia, prob, palabra == resultado.sugerencia)
+            for (palabra, frecuencia), prob in zip(candidatas, probs)
             if len(candidatas) > 1
         ]
 
@@ -1330,8 +1411,10 @@ class Aplicacion:
             if vista.max_niveles is None
             else texto_cambios(vista.max_niveles)
         )
+        self.bloque_resumen.controls = []
         self.bloque_limite.controls = []
         self.bloque_empates.controls = []
+        self._dibujar_resumen(vista, resultado)
 
         if vista.fase == "sugerida":
             self.titulo_resultado.value = f"{resultado.original}  ->  {resultado.sugerencia}"

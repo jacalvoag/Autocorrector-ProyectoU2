@@ -177,6 +177,19 @@ El árbol "Así buscó A*" también refleja el límite y el desempate:
 - La explicación de la meta cita el empate: "Empató en costo con «monte»
   (4.48), pero «norte» (5.20) es más usada y por eso se eligió."
 
+## Probabilidad de las 5 palabras más frecuentes y resumen de A*
+
+- El bloque de desempate y el árbol muestran hasta 5 palabras empatadas en
+  costo (las más frecuentes) con su probabilidad relativa de uso. Se calcula
+  pasando la escala Zipf a apariciones (`10**zipf`) y repartiendo el 100 %
+  entre las palabras mostradas (`probabilidades()` en `diccionario.py`). Con
+  límite 2, `nmovte`: `norte` 78 %, `monte` 15 %, `note` 6 %, `mote` 1 %.
+- El bloque "Cómo decidió A*" resume la meta (cualquier palabra del
+  diccionario), la heurística con su valor inicial h, los costos y el
+  desempate.
+- `Resultado.podados` cuenta las combinaciones de letras que el límite de
+  niveles descartó sin explorar y se muestra junto al indicador de cambios.
+
 ## Pendientes
 
 - Revisar juntos la rama `rafael-nucleo-propuesta` antes de pasarla a

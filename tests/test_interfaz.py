@@ -528,7 +528,10 @@ class TestVistaFlet(unittest.TestCase):
             actual = pila.pop()
 
             if isinstance(actual, ft.Text):
-                encontrados.append(str(actual.value))
+                encontrados.append(str(actual.value or ""))
+
+                for tramo in actual.spans or []:
+                    encontrados.append(str(tramo.text))
 
             for hijo in getattr(actual, "controls", None) or []:
                 pila.append(hijo)
@@ -563,10 +566,24 @@ class TestVistaFlet(unittest.TestCase):
         self.app.controlador.actualizar_entrada("nmovte ")
         textos = self.textos(self.app.bloque_empates)
 
-        self.assertTrue(any("gana la más usada" in t for t in textos))
         self.assertIn("norte", textos)
         self.assertIn("monte", textos)
         self.assertTrue(any("elegida" in t for t in textos))
+        self.assertTrue(any(t.startswith("78%") for t in textos))
+        self.assertTrue(any("se optó por la de mayor probabilidad" in t for t in textos))
+        palabras = [t for t in textos if t in ("norte", "monte", "note", "mote")]
+        self.assertEqual(set(palabras), {"norte", "monte", "note", "mote"})
+        self.assertLessEqual(len(palabras), 5)
+
+    def test_resumen_explica_meta_heuristica_y_podas(self):
+        self.app.controlador.actualizar_entrada("nmovte ")
+        resumen = " ".join(self.textos(self.app.bloque_resumen))
+        limite = " ".join(self.textos(self.app.bloque_limite))
+
+        self.assertIn("Cómo decidió A*", resumen)
+        self.assertIn("cualquier palabra del diccionario", resumen)
+        self.assertIn("h(«nmovte»)", resumen)
+        self.assertIn("combinaciones de letras", limite)
 
     def test_sin_empate_lo_dice(self):
         self.app.controlador.actualizar_entrada("gstp ")

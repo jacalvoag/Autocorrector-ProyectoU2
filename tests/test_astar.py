@@ -401,6 +401,17 @@ class TestLimiteDeNiveles(unittest.TestCase):
         self.assertEqual(resultado.costo, 4)
         self.assertEqual(len(resultado.ruta), 2)
 
+    def test_cuenta_las_combinaciones_que_descarta_el_limite(self):
+        con_limite = buscar_correccion(
+            "nmovte", self.teclados["qwerty"], self.diccionario, max_niveles=3
+        )
+        sin_limite = buscar_correccion(
+            "nmovte", self.teclados["qwerty"], self.diccionario
+        )
+
+        self.assertGreater(con_limite.podados, 0)
+        self.assertEqual(sin_limite.podados, 0)
+
     def test_ruta_barata_con_mas_pasos_contra_cara_con_menos(self):
         # abc a cba: tres intercambios cuestan 3; dos sustituciones lejanas, 4.
         metas = frozenset({"cba"})

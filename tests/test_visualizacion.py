@@ -339,11 +339,12 @@ class TestGrafoConLimiteYEmpate(unittest.TestCase):
         self.assertIn("norte", textos)
         self.assertIn("monte", textos)
         self.assertIn("perdió por frecuencia", textos)
-        self.assertIn("frecuencia 5.20", textos)
+        self.assertTrue(any("prob. 78%" in t and "frec. 5.20" in t for t in textos))
 
     def test_la_explicacion_de_la_meta_cita_el_desempate(self):
         self.assertIn("«monte»", self.grafo.explicacion.value)
-        self.assertIn("es más usada", self.grafo.explicacion.value)
+        self.assertIn("es la más usada", self.grafo.explicacion.value)
+        self.assertIn("78%", self.grafo.explicacion.value)
 
     def test_el_contador_menciona_el_limite(self):
         self.assertIn("límite de 2 cambios", self.grafo.contador.value)
