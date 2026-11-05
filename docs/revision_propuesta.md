@@ -21,7 +21,7 @@ Estados usados: **Cumple**, **Pendiente** (falta hacerlo) y
 | 6 | Estados de 1 a 6 letras | `_sucesores` ya no elimina la única letra; la inserción se limita a 6. `test_no_se_genera_la_palabra_vacia` | Ninguno | José / Rafael | Cumple |
 | 7 | Heurística: mínimo sobre el diccionario de `max(2 × diferencia de longitudes, letras faltantes)` | `IndiceHeuristica` en `astar.py` calcula exactamente esa fórmula (letras faltantes con repetición). `test_indice_coincide_con_la_formula` la compara con la fórmula aplicada palabra por palabra; `test_heuristica_admisible`, `test_heuristica_consistente` y `test_ejemplo_de_la_propuesta` (h(gstp) = 2 con el vocabulario de la propuesta) | Ninguno. La versión anterior devolvía 0, 1 o 2 según firmas de letras | José / Rafael | Cumple |
 | 8 | A* devuelve la corrección de costo mínimo | `test_compara_con_costo_uniforme` compara contra costo uniforme; ejemplos: gstp→gato (2), hoal→hola (1), cssa→casa (1) | Ninguno | José | Cumple |
-| 9 | Vocabulario en español | `datos/palabras.txt`, 19,151 palabras de 1 a 6 letras sin tildes ni ñ, con fuentes citadas | Ninguno | José | Cumple |
+| 9 | Vocabulario en español | `datos/palabras.txt`, 10,136 palabras de 1 a 6 letras sin tildes ni ñ, cada una con su frecuencia de uso, depuradas de siglas y palabras raras, con fuentes citadas | Ninguno | José | Cumple |
 | 10 | Al presionar espacio se procesa la palabra y el espacio no llega al algoritmo | `Controlador.actualizar_entrada`; `test_el_espacio_no_llega_al_algoritmo` | Ninguno | Rafael | Cumple |
 | 11 | Palabra válida: se conserva y no se ejecuta A* | `test_palabra_valida_no_ofrece_reemplazo` | Ninguno | Rafael | Cumple |
 | 12 | Sugerencia con palabra, costo, ruta y métricas; reemplazo solo al pulsar Aceptar | Panel de resultado en `interfaz.py`; `test_aceptar_reemplaza`, `test_rechazar_conserva_original`, `test_flujo_completo_con_teclas_en_pantalla` | Ninguno | Rafael | Cumple |
@@ -90,7 +90,7 @@ Cómo funciona:
   había corrección.
 
 Por qué 3: los tres casos del reporte necesitan exactamente 3 operaciones.
-Con 2, `nmovte` se corrige a `monte` (costo 4) y `cyqrot` en Dvorak queda
+Con 2, `nmovte` se corrige a `norte` (costo 4; `monte` cuesta lo mismo, pero `norte` se usa más) y `cyqrot` en Dvorak queda
 sin corrección. Con palabras cortas, 3 cambios ya pueden alterar casi toda la
 palabra; si hiciera falta, el límite puede depender del largo.
 
@@ -98,23 +98,56 @@ Medición con 144 palabras del diccionario con 1, 2 y 3 errores al azar
 (48 de cada una, repartidas entre QWERTY, AZERTY, Dvorak y un teclado
 aleatorio con semilla 7), comparando con la búsqueda sin límite:
 
-- Con 1 y 2 errores, las 96 sugerencias son idénticas.
-- Con 3 errores, 43 de 48 son idénticas, 4 eran incompletas sin límite y
-  ahora se resuelven, y 1 cambia de palabra con el mismo costo (`crup` en 4
-  operaciones contra `echa` en 3).
-- Tiempo máximo de una búsqueda: 3.31 s sin límite y 0.53 s con límite.
-- Frontera máxima media: 43,491 sin límite y 6,967 con límite.
+- Con 1 error, las 48 sugerencias son idénticas; con 2, 47 de 48; con 3,
+  45 de 48. Las 4 restantes eran incompletas sin límite (se agotaba el
+  presupuesto de estados) y con límite se resuelven.
+- Tiempo máximo de una búsqueda: 2.82 s sin límite y 0.32 s con límite.
+- Estados expandidos medios: 390 sin límite y 283 con límite.
+- Frontera máxima media: 39,685 sin límite y 7,543 con límite.
 
 Los tres casos del reporte con el límite de 3 (estados expandidos y
 frontera máxima, contra la búsqueda sin límite):
 
-- `nmovte` en QWERTY: 524 y 10,472 (antes 542 y 50,751).
-- `cyqrot` en Dvorak: 215 y 7,365 (antes 266 y 26,366).
-- `gstp` en la aleatoria con semilla 2026: 321 y 16,811 (antes 348 y 52,219).
+- `nmovte` en QWERTY: 449 y 10,448 (sin límite 460 y 43,898).
+- `cyqrot` en Dvorak: 185 y 6,788 (sin límite 221 y 22,298).
+- `gstp` en la aleatoria con semilla 2026: 233 y 13,745 (sin límite 249 y
+  39,311).
 
 La corrección y el costo de los tres son los mismos. La prueba
 `test_coincide_con_la_referencia_sin_podas` compara el resultado contra una
 búsqueda de costo uniforme sobre `(palabra, nivel)` sin heurística ni podas.
+
+## Vocabulario y desempate por frecuencia
+
+Cada palabra de `palabras.txt` lleva su frecuencia en la escala Zipf de
+wordfreq (`palabra 4.25`; más alto, más usada). `cargar_diccionario()`
+devuelve un `Diccionario`: un `frozenset` de palabras que además guarda las
+`frecuencias`. Un archivo sin frecuencias o un `frozenset` normal siguen
+funcionando; entonces todas valen 0.
+
+Cuando varias palabras del diccionario se alcanzan con el mismo costo
+mínimo, A* elige la más frecuente y, si también empatan, la primera en orden
+alfabético. La frecuencia nunca compensa un costo mayor: solo desempata
+entre sugerencias igual de baratas. Ejemplo: con 2 cambios, `nmovte` da
+`norte` y `monte` con costo 4; se sugiere `norte`, que se usa más.
+
+Depuración del diccionario (`scripts/generar_diccionario.py`), de 19,151 a
+10,136 palabras:
+
+- Se descartan las formas con frecuencia Zipf menor a 2.5 (8,823), sobre
+  todo conjugaciones raras y términos que nadie espera como sugerencia.
+- De una o dos letras solo quedan palabras del español de uso general
+  (62 descartadas): el diccionario ortográfico acepta letras sueltas,
+  siglas y símbolos como `d`, `ap` o `km`.
+- Se excluyen a mano 130 abreviaturas, palabras de otros idiomas y nombres
+  propios (`abc`, `sra`, `nro`, `too`, `yes`, `juan`, ...). La lista está
+  en el script y se puede ampliar.
+
+Efecto: `tok` ya no se corrige a `too` (ahora `tio`), `tpo` deja de ser
+palabra válida y se corrige a `top`. En una prueba con 284 palabras comunes
+de 4 a 6 letras con una tecla vecina equivocada (QWERTY, límite de 3), la
+sugerencia acertó 236 veces con el diccionario anterior y 274 con el
+nuevo.
 
 ## Pendientes
 

@@ -34,6 +34,10 @@ El archivo `autocorrector/datos/palabras.txt` se genera con
 wordfreq 3.1.1 verificadas con el diccionario ortográfico es_MX de
 LibreOffice. Se conservan únicamente palabras de 1 a 6 letras dentro del
 alfabeto a-z; las tildes se eliminan y las palabras con ñ se excluyen.
+Además se descartan las formas muy poco usadas, las siglas y abreviaturas, y
+las palabras de otros idiomas (de 19,151 candidatas quedan 10,136). Cada
+palabra lleva su frecuencia de uso, que A* utiliza para elegir entre
+sugerencias de igual costo. Detalles en `docs/revision_propuesta.md`.
 
 El archivo generado queda versionado y se utiliza sin conexión a internet.
 Su cobertura depende de las fuentes; no se presenta como una lista de todas
@@ -54,8 +58,9 @@ las palabras existentes en español.
 
 Modificaciones realizadas: selección de formas verificadas por es_MX,
 exclusión de ñ y otros caracteres fuera del alfabeto acordado,
-eliminación de tildes, límite de seis letras, eliminación de duplicados
-y orden alfabético.
+eliminación de tildes, límite de seis letras, eliminación de duplicados,
+orden alfabético, filtro de frecuencia mínima, exclusión de siglas y palabras
+de otros idiomas, y registro de la frecuencia de cada palabra.
 
 ## Instalación
 
