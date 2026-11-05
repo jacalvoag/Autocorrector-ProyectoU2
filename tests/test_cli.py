@@ -40,7 +40,7 @@ class TestCLI(unittest.TestCase):
         dos = self.ejecutar("nmovte", "--max-niveles", "2")
         sin_limite = self.ejecutar("nmovte", "--max-niveles", "0")
 
-        self.assertIn("Sugerencia: monte", dos.stdout)
+        self.assertIn("Sugerencia: norte", dos.stdout)
         self.assertIn("Sugerencia: nombre", sin_limite.stdout)
 
     def test_rechaza_max_niveles_negativo(self):
