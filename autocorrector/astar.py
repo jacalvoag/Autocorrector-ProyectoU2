@@ -32,6 +32,21 @@ class Expansion:
 
 
 @dataclass(frozen=True)
+class NivelInfo:
+    """Lo que A* hizo para llegar a un nivel (solo con límite de niveles).
+
+    ``expandidos`` son las palabras del nivel anterior que se abrieron;
+    ``generados``, las combinaciones de letras que salieron de ellas, y
+    ``podados``, las que el límite descartó sin explorar.
+    """
+
+    nivel: int
+    expandidos: int
+    generados: int
+    podados: int
+
+
+@dataclass(frozen=True)
 class Resultado:
     estado: Literal["valida", "sugerida", "incompleta", "sin_correccion"]
     original: str
@@ -45,6 +60,7 @@ class Resultado:
     empates: tuple[tuple[str, float], ...] = ()
     # Combinaciones de letras que el límite de niveles descartó sin explorar.
     podados: int = 0
+    niveles: tuple[NivelInfo, ...] = ()
 
 
 def _validar_entrada(palabra: str) -> None:
@@ -292,6 +308,24 @@ def buscar_correccion(
     expandidos = 0
     frontera_maxima = 1
     podados = 0
+    por_nivel = {
+        clave: [0] * ((max_niveles or 0) + 1)
+        for clave in ("expandidos", "generados", "podados")
+    }
+
+    def resumen_niveles() -> tuple[NivelInfo, ...]:
+        if not limitar:
+            return ()
+
+        return tuple(
+            NivelInfo(
+                n,
+                por_nivel["expandidos"][n - 1],
+                por_nivel["generados"][n],
+                por_nivel["podados"][n],
+            )
+            for n in range(1, max_niveles + 1)
+        )
 
     while frontera:
         f, g, estado, nivel = heappop(frontera)
@@ -327,6 +361,9 @@ def buscar_correccion(
 
         expandidos += 1
 
+        if limitar:
+            por_nivel["expandidos"][nivel] += 1
+
         if traza is not None:
             llegada = anteriores.get((estado, nivel))
             traza.append(
@@ -346,9 +383,12 @@ def buscar_correccion(
             nuevo_g = g + costo
 
             if limitar:
+                por_nivel["generados"][nuevo_nivel] += 1
+
                 # En el último nivel solo sirve una palabra del diccionario.
                 if nuevo_nivel == max_niveles and destino not in diccionario:
                     podados += 1
+                    por_nivel["podados"][nuevo_nivel] += 1
                     continue
 
                 if any(
@@ -363,6 +403,7 @@ def buscar_correccion(
                 # h de costo, hacen falta al menos h/2 operaciones.
                 if (nuevo_h + 1) // 2 > max_niveles - nuevo_nivel:
                     podados += 1
+                    por_nivel["podados"][nuevo_nivel] += 1
                     continue
             else:
                 if nuevo_g >= mejor_g.get((destino, 0), float("inf")):
@@ -417,6 +458,7 @@ def buscar_correccion(
                 frontera_maxima,
                 (),
                 podados,
+                resumen_niveles(),
             )
 
         raise RuntimeError("No se encontró una palabra alcanzable.")
@@ -434,4 +476,5 @@ def buscar_correccion(
             for meta in sorted(empatadas, key=preferencia)
         ),
         podados,
+        resumen_niveles(),
     )

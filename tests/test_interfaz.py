@@ -543,23 +543,36 @@ class TestVistaFlet(unittest.TestCase):
 
         return encontrados
 
-    def test_indicador_de_cambios_usados(self):
+    def test_lateral_muestra_los_niveles_hasta_el_limite(self):
         self.app.controlador.actualizar_entrada("nmovte ")
-        textos = self.textos(self.app.bloque_limite)
+        textos = self.textos(self.app.grafo.lateral)
 
-        self.assertTrue(any("3 de 3 permitidos" in t for t in textos))
+        self.assertIn("Límite: 3 cambios", textos)
+        self.assertIn("Nivel 3 de 3", textos)
+        self.assertIn("nombre", textos)
+        self.assertTrue(any(t.startswith("Último nivel") for t in textos))
 
         self.app.controlador.cambiar_max_niveles(2)
         self.app.controlador.actualizar_entrada("nmovte ")
-        textos = self.textos(self.app.bloque_limite)
+        textos = self.textos(self.app.grafo.lateral)
 
-        self.assertTrue(any("2 de 2 permitidos" in t for t in textos))
+        self.assertIn("Límite: 2 cambios", textos)
+        self.assertIn("Nivel 2 de 2", textos)
+        self.assertNotIn("Nivel 3 de 3", textos)
 
-    def test_sin_correccion_muestra_el_limite_agotado(self):
+    def test_lateral_cuenta_combinaciones_generadas_y_cortadas(self):
+        self.app.controlador.actualizar_entrada("nmovte ")
+        textos = " ".join(self.textos(self.app.grafo.lateral))
+
+        self.assertIn("combinaciones", textos)
+        self.assertIn("el límite descartó", textos)
+
+    def test_sin_correccion_muestra_los_niveles_vacios(self):
         self.app.controlador.actualizar_entrada("xyzxyz ")
-        textos = self.textos(self.app.bloque_limite)
+        textos = self.textos(self.app.grafo.lateral)
 
-        self.assertTrue(any("Ninguna palabra a 3 cambios o menos" in t for t in textos))
+        self.assertIn("Límite: 3 cambios", textos)
+        self.assertIn("—", textos)
 
     def test_muestra_los_empates_con_su_frecuencia(self):
         self.app.controlador.cambiar_max_niveles(2)
@@ -574,16 +587,6 @@ class TestVistaFlet(unittest.TestCase):
         palabras = [t for t in textos if t in ("norte", "monte", "note", "mote")]
         self.assertEqual(set(palabras), {"norte", "monte", "note", "mote"})
         self.assertLessEqual(len(palabras), 5)
-
-    def test_resumen_explica_meta_heuristica_y_podas(self):
-        self.app.controlador.actualizar_entrada("nmovte ")
-        resumen = " ".join(self.textos(self.app.bloque_resumen))
-        limite = " ".join(self.textos(self.app.bloque_limite))
-
-        self.assertIn("Cómo decidió A*", resumen)
-        self.assertIn("cualquier palabra del diccionario", resumen)
-        self.assertIn("h(«nmovte»)", resumen)
-        self.assertIn("combinaciones de letras", limite)
 
     def test_sin_empate_lo_dice(self):
         self.app.controlador.actualizar_entrada("gstp ")

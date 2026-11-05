@@ -412,6 +412,23 @@ class TestLimiteDeNiveles(unittest.TestCase):
         self.assertGreater(con_limite.podados, 0)
         self.assertEqual(sin_limite.podados, 0)
 
+    def test_niveles_resumen_lo_que_hizo_cada_nivel(self):
+        resultado = buscar_correccion(
+            "pstp", self.teclados["qwerty"], self.diccionario, max_niveles=3
+        )
+
+        self.assertEqual([n.nivel for n in resultado.niveles], [1, 2, 3])
+        self.assertEqual(resultado.niveles[0].expandidos, 1)  # Solo el inicio.
+        self.assertEqual(
+            sum(n.podados for n in resultado.niveles), resultado.podados
+        )
+        self.assertEqual(resultado.niveles[0].podados, 0)
+
+        sin_limite = buscar_correccion(
+            "pstp", self.teclados["qwerty"], self.diccionario
+        )
+        self.assertEqual(sin_limite.niveles, ())
+
     def test_ruta_barata_con_mas_pasos_contra_cara_con_menos(self):
         # abc a cba: tres intercambios cuestan 3; dos sustituciones lejanas, 4.
         metas = frozenset({"cba"})

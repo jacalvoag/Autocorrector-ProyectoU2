@@ -184,11 +184,13 @@ El árbol "Así buscó A*" también refleja el límite y el desempate:
   pasando la escala Zipf a apariciones (`10**zipf`) y repartiendo el 100 %
   entre las palabras mostradas (`probabilidades()` en `diccionario.py`). Con
   límite 2, `nmovte`: `norte` 78 %, `monte` 15 %, `note` 6 %, `mote` 1 %.
-- El bloque "Cómo decidió A*" resume la meta (cualquier palabra del
-  diccionario), la heurística con su valor inicial h, los costos y el
-  desempate.
+- A la derecha del árbol, el panel "Límite" dibuja los niveles uno bajo
+  otro (lo que escribiste, nivel 1, 2, 3) y la palabra de cada nivel va
+  apareciendo al mismo ritmo que el árbol. Cada nivel indica cuántas
+  combinaciones de letras salieron y cuántas cortó el límite
+  (`Resultado.niveles`); el último nivel se marca en ámbar.
 - `Resultado.podados` cuenta las combinaciones de letras que el límite de
-  niveles descartó sin explorar y se muestra junto al indicador de cambios.
+  niveles descartó sin explorar y se muestra en el panel del límite.
 
 ## Pendientes
 

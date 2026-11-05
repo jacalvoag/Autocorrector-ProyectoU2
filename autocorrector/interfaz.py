@@ -221,26 +221,6 @@ def ficha_palabra(palabra: str) -> ft.Container:
     )
 
 
-def casilla_cambio(numero: int, estado: str) -> ft.Container:
-    """Un cuadro por cambio permitido: lleno si se usó, vacío si no."""
-    colores = {
-        "usado": (PRIMARIO, PRIMARIO, ft.Colors.WHITE),
-        "libre": (SUPERFICIE, GRIS_BORDE, TEXTO_SECUNDARIO),
-        "agotado": (ft.Colors.RED_50, ERROR, ERROR),
-    }
-    fondo, borde, texto = colores[estado]
-
-    return ft.Container(
-        width=32,
-        height=32,
-        alignment=ft.Alignment.CENTER,
-        border_radius=6,
-        bgcolor=fondo,
-        border=ft.Border.all(1, borde),
-        content=ft.Text("X" if estado == "agotado" else str(numero), size=13, weight=ft.FontWeight.BOLD, color=texto),
-    )
-
-
 ANCHO_BARRA = 240
 
 
@@ -279,9 +259,9 @@ def barra_frecuencia(
 # Grafo interactivo de la búsqueda
 
 ANCHO_NODO = 160
-ALTO_NODO = 54
+ALTO_NODO = 66
 COLUMNA = 240
-FILA = 64
+FILA = 78
 ENCABEZADO = 34  # Alto de la fila con «Nivel 1 de 3», «Nivel 2 de 3»...
 MAX_EMPATES_EN_ARBOL = 4  # Con la elegida son las 5 más frecuentes.
 MAX_EMPATES_EN_PANEL = 5
@@ -357,7 +337,10 @@ class GrafoBusqueda:
                 vertical_alignment=ft.CrossAxisAlignment.START,
             ),
         )
-        self.desplazable = ft.Column([self.area], scroll=ft.ScrollMode.AUTO, height=460)
+        self.desplazable = ft.Column([self.area], scroll=ft.ScrollMode.AUTO, height=520)
+        # Panel de la derecha: cómo avanzan los niveles hasta el límite.
+        self.lateral = ft.Column(spacing=6)
+        self.extra = ft.Column(spacing=8)
 
         self.contenedor = ft.Container(
             padding=16,
@@ -396,7 +379,20 @@ class GrafoBusqueda:
                         wrap=True,
                         spacing=16,
                     ),
-                    ft.Row([self.desplazable], scroll=ft.ScrollMode.AUTO),
+                    ft.ResponsiveRow(
+                        [
+                            ft.Container(
+                                ft.Row([self.desplazable], scroll=ft.ScrollMode.AUTO),
+                                col={"xs": 12, "lg": 8},
+                            ),
+                            ft.Container(
+                                ft.Column([self.lateral, self.extra], spacing=10),
+                                col={"xs": 12, "lg": 4},
+                            ),
+                        ],
+                        spacing=16,
+                        run_spacing=12,
+                    ),
                     self.caja_explicacion,
                 ],
                 spacing=10,
@@ -447,7 +443,7 @@ class GrafoBusqueda:
         self.area.height = alto
         self.lienzo.width = ancho
         self.lienzo.height = alto
-        self.desplazable.height = min(alto, 460)
+        self.desplazable.height = min(alto, 520)
         self.deslizador.max = max(2, len(self._pasos))
         self.deslizador.divisions = max(1, len(self._pasos) - 1)
         self._dibujar()
@@ -564,6 +560,7 @@ class GrafoBusqueda:
             *etiquetas,
         ]
 
+        self.lateral.controls = self._lateral(visibles, final)
         self.deslizador.value = paso
         limite = (
             "sin límite de cambios"
@@ -575,6 +572,154 @@ class GrafoBusqueda:
             f"palabras en total ({limite}); aquí se ven las primeras y el camino final."
         )
         self.explicacion.value = self._explicar(self._nodos[destacado], final)
+
+    def _lateral(self, visibles: list[Nodo], final: bool) -> list[ft.Control]:
+        """Los niveles de la búsqueda, uno bajo otro, hasta llegar al límite.
+
+        Cada nivel es un cambio. Se van mostrando al mismo ritmo que el
+        árbol; al final quedan las palabras del camino elegido.
+        """
+        limite = self._max_niveles
+        ultimo = limite if limite is not None else self._columnas - 1
+        info = {n.nivel: n for n in (self._resultado.niveles if self._resultado else ())}
+        meta = next((n for n in self._nodos.values() if n.tipo == "meta"), None)
+        columna_meta = self._lugar[meta.estado][0] if meta else None
+
+        por_columna: dict[int, Nodo] = {}
+        origen = (
+            [n for n in self._nodos.values() if n.tipo in ("inicio", "ruta", "meta")]
+            if final
+            else visibles
+        )
+        for nodo in sorted(origen, key=lambda n: n.orden):
+            por_columna[self._lugar[nodo.estado][0]] = nodo
+
+        total = self._resultado.podados if self._resultado else 0
+        encabezado = [
+            ft.Row(
+                [
+                    ft.Icon(ft.Icons.STAIRS_OUTLINED, color=AVISO if limite else PRIMARIO, size=20),
+                    ft.Text(
+                        f"Límite: {texto_cambios(limite)}" if limite else "Sin límite de cambios",
+                        size=16,
+                        weight=ft.FontWeight.BOLD,
+                        color=PRIMARIO,
+                    ),
+                ],
+                spacing=8,
+            ),
+            ft.Text(
+                (
+                    f"Cada nivel es un cambio. A* no pasa del nivel {limite}: "
+                    "las ramas más lejanas se cortan sin explorarse."
+                    + (f" Aquí cortó {total:,} combinaciones." if final and total else "")
+                )
+                if limite
+                else "Cada nivel es un cambio. Sin límite, A* puede seguir tan lejos como haga falta.",
+                size=12,
+                color=TEXTO_SECUNDARIO,
+            ),
+        ]
+
+        filas: list[ft.Control] = []
+
+        for nivel in range(ultimo + 1):
+            nodo = por_columna.get(nivel)
+            es_limite = limite is not None and nivel == limite
+            sobra = final and columna_meta is not None and nivel > columna_meta
+            sin_meta = final and columna_meta is None and nivel > 0
+
+            if nodo is not None:
+                palabra = nodo.estado
+                es_meta = final and nodo.tipo == "meta"
+                color = EXITO if es_meta else PRIMARIO
+                fondo = ft.Colors.GREEN_50 if es_meta else (PRIMARIO_SUAVE if nodo.tipo != "explorado" else GRIS_FONDO)
+            else:
+                palabra = "—" if (sobra or sin_meta) else "?"
+                color = TEXTO_SECUNDARIO
+                fondo = SUPERFICIE
+                es_meta = False
+
+            nombre = (
+                "Lo que escribiste"
+                if nivel == 0
+                else f"Nivel {nivel}" + (f" de {limite}" if limite else "")
+            )
+            detalle: list[ft.Control] = []
+
+            if nivel > 0 and nodo is not None and nodo.padre:
+                padre = self._nodos.get(nodo.padre)
+                costo = nodo.g - padre.g if padre else nodo.g
+                accion = ACCION_SIMPLE.get(nodo.operacion or "", "un cambio")
+                detalle.append(ft.Text(f"desde «{nodo.padre}»: {accion} (+{costo})", size=11, color=TEXTO_SECUNDARIO))
+
+            if nivel > 0 and nivel in info and info[nivel].expandidos and (nodo is not None or final):
+                dato = info[nivel]
+                texto = (
+                    f"de {dato.expandidos} palabras salieron {dato.generados:,} combinaciones"
+                )
+                if dato.podados:
+                    texto += f"; el límite descartó {dato.podados:,}"
+                detalle.append(ft.Text(texto, size=11, color=AVISO if dato.podados else TEXTO_SECUNDARIO))
+
+            if es_limite:
+                detalle.append(
+                    ft.Text(
+                        "Último nivel: solo se acepta una palabra del diccionario; "
+                        "más allá no se explora.",
+                        size=11,
+                        weight=ft.FontWeight.BOLD,
+                        color=AVISO,
+                    )
+                )
+            elif sobra:
+                detalle.append(ft.Text("No hizo falta llegar aquí.", size=11, color=TEXTO_SECUNDARIO))
+            elif sin_meta and es_limite is False:
+                detalle.append(ft.Text("Sin palabra válida en este nivel.", size=11, color=TEXTO_SECUNDARIO))
+
+            if nivel > 0:
+                filas.append(
+                    ft.Row(
+                        [ft.Icon(ft.Icons.ARROW_DOWNWARD, size=16, color=GRIS_BORDE)],
+                        alignment=ft.MainAxisAlignment.CENTER,
+                    )
+                )
+
+            filas.append(
+                ft.Container(
+                    padding=ft.Padding.symmetric(vertical=8, horizontal=12),
+                    border_radius=10,
+                    bgcolor=ft.Colors.AMBER_50 if es_limite and nodo is None else fondo,
+                    border=ft.Border.all(
+                        2 if es_limite else 1,
+                        ft.Colors.AMBER_700 if es_limite else (EXITO if es_meta else BORDE),
+                    ),
+                    opacity=0.55 if (nodo is None and not es_limite) else 1,
+                    content=ft.Column(
+                        [
+                            ft.Row(
+                                [
+                                    ft.Text(nombre, size=11, weight=ft.FontWeight.BOLD, color=AVISO if es_limite else TEXTO_SECUNDARIO),
+                                    ft.Text(
+                                        palabra,
+                                        size=20,
+                                        weight=ft.FontWeight.BOLD,
+                                        color=color,
+                                        font_family=FUENTE_PALABRA,
+                                        font_family_fallback=FUENTES_RESPALDO,
+                                    ),
+                                ],
+                                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                            ),
+                            *detalle,
+                        ],
+                        spacing=2,
+                    ),
+                )
+            )
+
+        return [*encabezado, *filas]
 
     def _frase_empate(self, meta: str) -> str:
         if not self._perdedoras or meta not in self._frecuencia:
@@ -988,8 +1133,6 @@ class Aplicacion:
             color=TEXTO_SECUNDARIO,
         )
         self.nota_resultado = ft.Text(size=13, color=TEXTO_SECUNDARIO)
-        self.bloque_resumen = ft.Column(spacing=8)
-        self.bloque_limite = ft.Column(spacing=8)
         self.bloque_empates = ft.Column(spacing=8)
         self.boton_comparar = ft.OutlinedButton(
             content="Comparar con búsqueda sin límite",
@@ -997,6 +1140,7 @@ class Aplicacion:
             on_click=lambda e: self._tecla(self.controlador.comparar_sin_limite),
         )
         self.grafo = GrafoBusqueda(self.page)
+        self.bloque_limite = self.grafo.extra
         self.boton_aceptar = ft.FilledButton(
             content="Aceptar",
             icon=ft.Icons.CHECK,
@@ -1023,8 +1167,6 @@ class Aplicacion:
             self.titulo_ruta,
             self.ruta,
             self.nota_resultado,
-            self.bloque_resumen,
-            self.bloque_limite,
             self.bloque_empates,
             self.grafo.contenedor,
             ft.Row([self.boton_aceptar, self.boton_rechazar], spacing=10),
@@ -1181,128 +1323,26 @@ class Aplicacion:
         self.teclado.width = ancho * PASO
         self.teclado.height = alto * PASO
 
-    def _dibujar_resumen(self, vista: Vista, resultado: Resultado) -> None:
-        """Lo que se pidió explicar de la búsqueda: meta, heurística y desempate."""
-        h_inicio = vista.traza[0].h if vista.traza else None
-        lineas = [
-            (
-                "Meta",
-                f"cualquier palabra del diccionario ({len(self.controlador.diccionario):,} "
-                "palabras), no una sola conocida. A* se detiene al llegar a la primera "
-                "de menor costo.",
-            ),
-            (
-                "Heurística h",
-                "estima cuánto falta contando las letras que le faltan a la palabra "
-                "para parecerse a alguna del diccionario; nunca sobreestima, por eso "
-                "el resultado es el de costo mínimo."
-                + (
-                    f" Aquí h(«{resultado.original}») = {h_inicio}."
-                    if h_inicio is not None
-                    else ""
-                ),
-            ),
-            (
-                "Costos",
-                "cambiar por tecla vecina 1, por una no vecina 2, insertar o "
-                "eliminar 2, voltear dos letras contiguas 1. Las vecinas salen de "
-                f"las posiciones del teclado {vista.teclado.nombre}.",
-            ),
-        ]
-
-        if resultado.estado == "sugerida":
-            desempate = (
-                f"{len(resultado.empates)} palabras costaban lo mismo; "
-                "se optó por la más frecuente."
-                if len(resultado.empates) > 1
-                else "no hubo empate de costo."
-            )
-            lineas.append(("Desempate", desempate))
-
-        self.bloque_resumen.controls = [
-            ft.Container(
-                padding=14,
-                border_radius=10,
-                bgcolor=SUPERFICIE,
-                border=ft.Border.all(1, BORDE),
-                content=ft.Column(
-                    [
-                        ft.Text("Cómo decidió A*", size=13, weight=ft.FontWeight.BOLD, color=TEXTO_SECUNDARIO),
-                        *[
-                            ft.Text(
-                                spans=[
-                                    ft.TextSpan(f"{titulo}: ", ft.TextStyle(weight=ft.FontWeight.BOLD, color=PRIMARIO)),
-                                    ft.TextSpan(texto),
-                                ],
-                                size=13,
-                                color=ft.Colors.BLUE_GREY_900,
-                            )
-                            for titulo, texto in lineas
-                        ],
-                    ],
-                    spacing=6,
-                ),
-            )
-        ]
-
     def _dibujar_limite(self, vista: Vista, resultado: Resultado) -> None:
-        """Cuántos cambios usó la corrección y cuántos permitía el límite."""
-        limite = vista.max_niveles
-        usados = len(resultado.ruta)
-        sin_correccion = resultado.estado == "sin_correccion"
+        """Botón y tabla para comparar con la búsqueda sin límite.
 
-        if limite is None:
-            titulo = f"Cambios usados: {usados} (sin límite)"
-            casillas: list[ft.Control] = [
-                casilla_cambio(n, "usado") for n in range(1, usados + 1)
-            ]
-            explicacion = "No hay límite: A* puede explorar palabras tan lejanas como haga falta."
-        else:
-            if sin_correccion:
-                titulo = f"Ninguna palabra a {texto_cambios(limite)} o menos"
-                estados = ["agotado"] * limite
-            else:
-                titulo = f"Cambios usados: {usados} de {limite} permitidos"
-                estados = ["usado"] * usados + ["libre"] * (limite - usados)
+        Lo visual del límite (niveles, ramificación y poda) lo dibuja el
+        panel lateral del grafo.
+        """
+        if vista.max_niveles is None:
+            self.bloque_limite.controls = []
+            return
 
-            casillas = [casilla_cambio(n, e) for n, e in enumerate(estados, 1)]
-            explicacion = (
-                f"A* no revisa palabras que necesiten más de {texto_cambios(limite)}: "
-                "corta esas ramas y por eso explora menos estados. "
-                f"El límite descartó {resultado.podados:,} combinaciones de letras "
-                "sin explorarlas."
-            )
+        self.boton_comparar.disabled = vista.comparando
+        self.boton_comparar.content = (
+            "Comparando..." if vista.comparando else "Comparar con búsqueda sin límite"
+        )
+        controles: list[ft.Control] = [self.boton_comparar]
 
-        controles: list[ft.Control] = [
-            ft.Text("Límite de cambios", size=13, weight=ft.FontWeight.BOLD, color=TEXTO_SECUNDARIO),
-            ft.Row(
-                [ft.Text(titulo, size=15, weight=ft.FontWeight.BOLD, color=PRIMARIO), *casillas],
-                spacing=8,
-                wrap=True,
-                vertical_alignment=ft.CrossAxisAlignment.CENTER,
-            ),
-            ft.Text(explicacion, size=13, color=TEXTO_SECUNDARIO),
-        ]
-
-        if limite is not None:
-            controles.append(self.boton_comparar)
-            self.boton_comparar.disabled = vista.comparando
-            self.boton_comparar.content = (
-                "Comparando..." if vista.comparando else "Comparar con búsqueda sin límite"
-            )
-
-        if vista.comparacion is not None and limite is not None:
+        if vista.comparacion is not None:
             controles.append(self._tabla_comparacion(vista, resultado))
 
-        self.bloque_limite.controls = [
-            ft.Container(
-                padding=14,
-                border_radius=10,
-                bgcolor=SUPERFICIE,
-                border=ft.Border.all(1, BORDE),
-                content=ft.Column(controles, spacing=8),
-            )
-        ]
+        self.bloque_limite.controls = controles
 
     def _tabla_comparacion(self, vista: Vista, resultado: Resultado) -> ft.Control:
         sin = vista.comparacion
@@ -1411,10 +1451,8 @@ class Aplicacion:
             if vista.max_niveles is None
             else texto_cambios(vista.max_niveles)
         )
-        self.bloque_resumen.controls = []
         self.bloque_limite.controls = []
         self.bloque_empates.controls = []
-        self._dibujar_resumen(vista, resultado)
 
         if vista.fase == "sugerida":
             self.titulo_resultado.value = f"{resultado.original}  ->  {resultado.sugerencia}"
