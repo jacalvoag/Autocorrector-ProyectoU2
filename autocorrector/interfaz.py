@@ -290,6 +290,7 @@ class GrafoBusqueda:
         self._nodos: dict[str, Nodo] = {}
         self._lugar: dict[str, tuple[int, float]] = {}
         self._max_niveles: int | None = None
+        self.automatico = False
         self._columnas = 1
         self._perdedoras: list[tuple[str, float]] = []
         self._probabilidad: dict[str, float] = {}
@@ -612,6 +613,12 @@ class GrafoBusqueda:
                 (
                     f"Cada nivel es un cambio. A* no pasa del nivel {limite}: "
                     "las ramas más lejanas se cortan sin explorarse."
+                    + (
+                        f" Límite automático: una palabra de "
+                        f"{len(self._resultado.original)} letras admite {limite}."
+                        if self.automatico and self._resultado
+                        else ""
+                    )
                     + (f" Aquí cortó {total:,} combinaciones." if final and total else "")
                 )
                 if limite
@@ -1010,11 +1017,14 @@ class Aplicacion:
             width=200,
             dense=True,
             options=[
+                ft.DropdownOption(key="auto", text="Automático (por largo)"),
+                *[
                 ft.DropdownOption(
                     key="sin" if valor is None else str(valor),
                     text="Sin límite" if valor is None else texto_cambios(valor),
                 )
                 for valor in OPCIONES_NIVELES
+                ],
             ],
             on_select=self._al_elegir_niveles,
         )
@@ -1202,6 +1212,11 @@ class Aplicacion:
 
     def _al_elegir_niveles(self, e: ft.Event) -> None:
         clave = e.control.value
+
+        if clave == "auto":
+            self._tecla(self.controlador.usar_limite_automatico)
+            return
+
         valor = None if clave == "sin" else int(clave)
         self._tecla(lambda: self.controlador.cambiar_max_niveles(valor))
 
@@ -1249,9 +1264,12 @@ class Aplicacion:
         vista = self.controlador.vista()
 
         self.selector.value = vista.clave_teclado
-        self.selector_niveles.value = (
-            "sin" if vista.max_niveles is None else str(vista.max_niveles)
-        )
+        if vista.automatico:
+            self.selector_niveles.value = "auto"
+        else:
+            self.selector_niveles.value = (
+                "sin" if vista.max_niveles is None else str(vista.max_niveles)
+            )
         self.etiqueta_teclado.value = vista.teclado.nombre
         if vista.semilla is not None:
             # La semilla se muestra para poder repetir la distribución,
@@ -1514,6 +1532,7 @@ class Aplicacion:
             self.boton_rechazar.content = "Conservar original"
 
         self.metricas.controls = [costo, expandidos, frontera, duracion]
+        self.grafo.automatico = vista.automatico
         self.grafo.mostrar(resultado, vista.traza, vista.max_niveles)
 
 

@@ -23,6 +23,19 @@ OPCIONES_NIVELES: tuple[int | None, ...] = (1, 2, 3, 4, 5, None)
 # Operaciones máximas de una corrección. Con más cambios la palabra
 # sugerida ya se parece poco a lo escrito, sobre todo en palabras cortas.
 MAX_NIVELES = 3
+
+
+def limite_por_largo(largo: int) -> int:
+    """Cambios permitidos según el largo de la palabra escrita.
+
+    La mitad del largo redondeada hacia arriba, sin pasar de MAX_NIVELES:
+    1-2 letras, 1 cambio; 3-4 letras, 2; 5-6 letras, 3. En palabras cortas,
+    tres cambios ya reescriben casi todo y la sugerencia deja de parecerse
+    a lo escrito. Medición en docs/revision_propuesta.md.
+    """
+    return min(MAX_NIVELES, max(1, (largo + 1) // 2))
+
+
 CLAVE_ALEATORIA = "aleatoria"
 TECLADO_BASE_ALEATORIO = "qwerty"
 
@@ -39,6 +52,7 @@ class Busqueda:
     numero: int
     palabra: str
     teclado: Distribucion
+    max_niveles: int | None = None
 
 
 @dataclass(frozen=True)
@@ -61,6 +75,8 @@ class Vista:
     # Misma búsqueda sin límite de cambios, para compararla con la actual.
     comparacion: Resultado | None = None
     comparando: bool = False
+    # True si el límite se calcula según el largo de cada palabra.
+    automatico: bool = False
 
 
 def texto_cambios(cantidad: int | None) -> str:
@@ -147,7 +163,8 @@ class Controlador:
         al_cambiar: Callable[[], None] = lambda: None,
         *,
         max_estados: int | None = MAX_ESTADOS,
-        max_niveles: int | None = MAX_NIVELES,
+        max_niveles: int | None = None,
+        automatico: bool = True,
         buscar: Callable[..., Resultado] = buscar_correccion,
     ) -> None:
         if not teclados:
@@ -163,7 +180,15 @@ class Controlador:
         self._ejecutar = ejecutar
         self._al_cambiar = al_cambiar
         self._max_estados = max_estados
-        self._max_niveles = max_niveles
+        # Con ``automatico`` el límite sale del largo de cada palabra y
+        # ``max_niveles`` solo se usa al pasar a un límite fijo.
+        self._automatico = automatico and max_niveles is None
+        self._max_niveles = (
+            max_niveles if max_niveles is not None or not self._automatico else MAX_NIVELES
+        )
+        self._limite_aplicado: int | None = (
+            None if self._automatico else self._max_niveles
+        )
         self._buscar = buscar
         self._candado = threading.RLock()
 
@@ -206,9 +231,10 @@ class Controlador:
                 texto=tuple(self._texto),
                 teclas_resaltadas=letras_sustituidas(self._resultado),
                 traza=self._traza,
-                max_niveles=self._max_niveles,
+                max_niveles=self._limite_vigente(),
                 comparacion=self._comparacion,
                 comparando=self._comparando,
+                automatico=self._automatico,
             )
 
     # Teclados
@@ -267,10 +293,12 @@ class Controlador:
             raise ValueError("El límite de cambios debe ser positivo.")
 
         with self._candado:
-            if valor == self._max_niveles:
+            if valor == self._max_niveles and not self._automatico:
                 return
 
+            self._automatico = False
             self._max_niveles = valor
+            self._limite_aplicado = valor
             texto = (
                 "sin límite" if valor is None else f"{texto_cambios(valor)} como máximo"
             )
@@ -286,6 +314,42 @@ class Controlador:
 
         self._notificar()
 
+    def usar_limite_automatico(self) -> None:
+        """El límite pasa a depender del largo de cada palabra."""
+        with self._candado:
+            if self._automatico:
+                return
+
+            self._automatico = True
+            self._limite_aplicado = None
+
+            if self._descartar_pendiente():
+                self._avisar(
+                    "Límite automático (según el largo). Se descartó la "
+                    "revisión anterior; presiona espacio para buscar de nuevo.",
+                    "info",
+                )
+            else:
+                self._avisar(
+                    "Límite automático: 1-2 letras, 1 cambio; 3-4, 2; 5-6, 3.",
+                    "info",
+                )
+
+        self._notificar()
+
+    def _limite_para(self, palabra: str) -> int | None:
+        return limite_por_largo(len(palabra)) if self._automatico else self._max_niveles
+
+    def _limite_vigente(self) -> int | None:
+        """Límite de la búsqueda en pantalla o, sin ella, el que regiría hoy."""
+        if self._resultado is not None or self._fase == "buscando":
+            return self._limite_aplicado
+
+        return self._limite_para(self._palabra) if self._palabra else self._limite_base()
+
+    def _limite_base(self) -> int | None:
+        return None if self._automatico else self._max_niveles
+
     def comparar_sin_limite(self) -> None:
         """Repite la búsqueda actual sin límite para ver cuánto se ahorra."""
         with self._candado:
@@ -294,7 +358,7 @@ class Controlador:
             if (
                 self._fase not in ("sugerida", "sin_correccion")
                 or actual is None
-                or self._max_niveles is None
+                or self._limite_aplicado is None
                 or self._comparando
             ):
                 return
@@ -389,7 +453,10 @@ class Controlador:
             return
 
         self._contador += 1
-        busqueda = Busqueda(self._contador, palabra, self._teclado)
+        self._limite_aplicado = self._limite_para(palabra)
+        busqueda = Busqueda(
+            self._contador, palabra, self._teclado, self._limite_aplicado
+        )
         self._busqueda_actual = busqueda
         self._fase = "buscando"
         self._avisar(
@@ -411,7 +478,7 @@ class Controlador:
                 busqueda.teclado,
                 self.diccionario,
                 max_estados=self._max_estados,
-                max_niveles=self._max_niveles,
+                max_niveles=busqueda.max_niveles,
                 traza=traza,
             )
             error = None
@@ -468,7 +535,7 @@ class Controlador:
                 self._resultado = resultado
                 self._avisar(
                     f"No encontré una corrección cercana para «{busqueda.palabra}»: "
-                    f"ninguna palabra queda a {texto_cambios(self._max_niveles)} o menos.",
+                    f"ninguna palabra queda a {texto_cambios(busqueda.max_niveles)} o menos.",
                     "info",
                 )
             elif resultado.estado == "valida":

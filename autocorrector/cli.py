@@ -4,7 +4,7 @@ import sys
 from time import perf_counter
 
 from autocorrector.astar import buscar_correccion
-from autocorrector.controlador import MAX_NIVELES, texto_cambios
+from autocorrector.controlador import MAX_NIVELES, limite_por_largo, texto_cambios
 from autocorrector.diccionario import cargar_diccionario
 from autocorrector.teclados import cargar_distribuciones, generar_aleatoria
 
@@ -34,9 +34,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--max-niveles",
         type=int,
-        default=MAX_NIVELES,
+        default=None,
         help=(
-            "Operaciones máximas de la corrección (predeterminado: "
+            "Operaciones máximas de la corrección. Sin esta opción depende "
+            "del largo de la palabra (1-2 letras: 1; 3-4: 2; 5-6: "
             f"{MAX_NIVELES}). Con 0 no hay límite."
         ),
     )
@@ -62,8 +63,13 @@ def main(argv: list[str] | None = None) -> int:
 
         teclado = teclados[argumentos.teclado]
 
-    if argumentos.max_niveles < 0:
+    if argumentos.max_niveles is not None and argumentos.max_niveles < 0:
         parser.error("--max-niveles no puede ser negativo")
+
+    max_niveles = argumentos.max_niveles
+
+    if max_niveles is None:
+        max_niveles = limite_por_largo(len(argumentos.palabra))
 
     diccionario = cargar_diccionario()
 
@@ -75,7 +81,7 @@ def main(argv: list[str] | None = None) -> int:
             teclado,
             diccionario,
             max_estados=argumentos.max_estados,
-            max_niveles=argumentos.max_niveles or None,
+            max_niveles=max_niveles or None,
             traza=traza,
         )
         segundos = perf_counter() - inicio
@@ -86,6 +92,10 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Teclado: {teclado.nombre}")
     print(f"Palabras en el diccionario: {len(diccionario)}")
     print(f"Entrada: {resultado.original}")
+    print(
+        "Límite de cambios: "
+        + ("sin límite" if not max_niveles else str(max_niveles))
+    )
     print(f"Estado: {resultado.estado}")
 
     if resultado.estado == "valida":
@@ -95,7 +105,7 @@ def main(argv: list[str] | None = None) -> int:
     elif resultado.estado == "sin_correccion":
         print(
             "No hay una palabra del diccionario a "
-            f"{texto_cambios(argumentos.max_niveles)} o menos."
+            f"{texto_cambios(max_niveles)} o menos."
         )
     else:
         print(f"Sugerencia: {resultado.sugerencia}")

@@ -199,9 +199,38 @@ class TestControlador(unittest.TestCase):
             generar_aleatoria(self.teclados["qwerty"], vista.semilla).posiciones,
         )
 
-    def test_limite_de_niveles_predeterminado(self):
+    def test_limite_de_niveles_predeterminado_es_automatico(self):
         self.assertEqual(MAX_NIVELES, 3)
-        self.assertEqual(self.controlador.vista().max_niveles, MAX_NIVELES)
+        self.assertTrue(self.controlador.vista().automatico)
+
+    def test_limite_automatico_depende_del_largo(self):
+        from autocorrector.controlador import limite_por_largo
+
+        self.assertEqual(
+            [limite_por_largo(n) for n in range(1, 7)], [1, 1, 2, 2, 3, 3]
+        )
+
+        for palabra, esperado in (("gstp", 2), ("nmovte", 3), ("gtp", 2)):
+            with self.subTest(palabra=palabra):
+                vista = self.escribir(palabra + " ")
+
+                self.assertEqual(vista.max_niveles, esperado)
+                self.assertTrue(vista.automatico)
+                self.controlador.rechazar()
+
+    def test_limite_fijo_ignora_el_largo_y_se_puede_volver_a_automatico(self):
+        self.controlador.cambiar_max_niveles(3)
+        vista = self.escribir("gstp ")
+
+        self.assertFalse(vista.automatico)
+        self.assertEqual(vista.max_niveles, 3)
+        self.controlador.rechazar()
+
+        self.controlador.usar_limite_automatico()
+        vista = self.escribir("gstp ")
+
+        self.assertTrue(vista.automatico)
+        self.assertEqual(vista.max_niveles, 2)
 
     def test_cambiar_el_limite_descarta_la_sugerencia_pendiente(self):
         self.assertEqual(self.escribir("nmovte ").fase, "sugerida")
@@ -502,7 +531,7 @@ class TestVistaFlet(unittest.TestCase):
         self.assertIn("3 cambios o menos", self.app.nota_resultado.value)
 
     def test_selector_de_limite_cambia_la_busqueda(self):
-        self.assertEqual(self.app.selector_niveles.value, "3")
+        self.assertEqual(self.app.selector_niveles.value, "auto")
 
         self.app.selector_niveles.value = "2"
         self.app._al_elegir_niveles(
@@ -516,6 +545,12 @@ class TestVistaFlet(unittest.TestCase):
 
         self.app.controlador.cambiar_max_niveles(None)
         self.assertEqual(self.app.selector_niveles.value, "sin")
+
+        self.app.selector_niveles.value = "auto"
+        self.app._al_elegir_niveles(
+            type("E", (), {"control": self.app.selector_niveles})()
+        )
+        self.assertEqual(self.app.selector_niveles.value, "auto")
 
     def textos(self, control):
         """Todos los textos de un control y sus hijos."""

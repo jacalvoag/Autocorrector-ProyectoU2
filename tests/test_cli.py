@@ -43,6 +43,15 @@ class TestCLI(unittest.TestCase):
         self.assertIn("Sugerencia: norte", dos.stdout)
         self.assertIn("Sugerencia: nombre", sin_limite.stdout)
 
+    def test_limite_automatico_segun_el_largo(self):
+        corta = self.ejecutar("gstp")
+        larga = self.ejecutar("nmovte")
+        fija = self.ejecutar("gstp", "--max-niveles", "3")
+
+        self.assertIn("Límite de cambios: 2", corta.stdout)
+        self.assertIn("Límite de cambios: 3", larga.stdout)
+        self.assertIn("Límite de cambios: 3", fija.stdout)
+
     def test_rechaza_max_niveles_negativo(self):
         proceso = self.ejecutar("gstp", "--max-niveles", "-1")
 

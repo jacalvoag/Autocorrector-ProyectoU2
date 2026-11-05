@@ -149,6 +149,35 @@ de 4 a 6 letras con una tecla vecina equivocada (QWERTY, límite de 3), la
 sugerencia acertó 236 veces con el diccionario anterior y 274 con el
 nuevo.
 
+## Límite según el largo de la palabra
+
+Por defecto el límite es automático: la mitad del largo de la palabra
+escrita, redondeada hacia arriba y sin pasar de 3 (`limite_por_largo()` en
+`controlador.py`). 1 o 2 letras, 1 cambio; 3 o 4, 2 cambios; 5 o 6, 3
+cambios. En la ventana es la opción "Automático (por largo)" del selector;
+en la CLI es lo que pasa sin `--max-niveles`. Un límite fijo (1 a 5, o sin
+límite) lo reemplaza.
+
+Por qué: con 3 cambios, una palabra de 3 o 4 letras casi se reescribe
+entera. En una prueba con cadenas de letras al azar y límite 3, el 100 % de
+las de 3 y 4 letras recibían sugerencia (la mayoría con 2 o 3 cambios),
+contra 70 % en las de 6 letras: en palabras cortas el límite no corta nada.
+
+Medición con palabras reales mal escritas (palabras de frecuencia alta, 30
+por largo y por cantidad de errores de tecleo, QWERTY), comparando cuántas
+veces se recupera la palabra original con límite 2 y con límite 3:
+
+- 3 letras: igual con 2 y con 3 en 1, 2 y 3 errores (24, 9 y 6 de 30).
+- 4 letras: igual con 1 y 2 errores; con 3 errores, 5 con límite 2 y 8 con
+  límite 3 de 30.
+- 5 letras: igual con 1 y 3 errores y 16 contra 15 con 2 errores.
+- 6 letras: igual con 1 y 2 errores; con 3 errores, 6 con límite 2 (más 2
+  sin corrección) y 10 con límite 3.
+
+El límite 3 solo gana de forma clara en palabras de 6 letras con tres
+errores. Es una muestra pequeña: sirve para justificar la regla, no para
+afirmar un óptimo.
+
 ## Lo que se ve en la ventana
 
 - Selector "Límite de cambios" (1 a 5 o sin límite) junto al de teclado.
