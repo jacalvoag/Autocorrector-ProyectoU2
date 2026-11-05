@@ -70,6 +70,20 @@ class TestTraza(unittest.TestCase):
 
         self.assertEqual(valores, sorted(valores))
 
+    def test_traza_con_limite_de_niveles(self):
+        resultado, traza = self.buscar("nmovte", max_niveles=3)
+
+        self.assertEqual(resultado.sugerencia, "nombre")
+        self.assertEqual(len(traza), resultado.expandidos)
+        self.assertEqual(len({e.estado for e in traza}), len(traza))
+        self.assertTrue(all(e.g <= 2 * (3 - 1) for e in traza))
+
+    def test_traza_en_busqueda_sin_correccion(self):
+        resultado, traza = self.buscar("xyzxyz", max_niveles=3)
+
+        self.assertEqual(resultado.estado, "sin_correccion")
+        self.assertEqual(len(traza), resultado.expandidos)
+
     def test_traza_en_busqueda_incompleta(self):
         resultado, traza = self.buscar("xyzxyz", max_estados=500)
 
@@ -128,6 +142,16 @@ class TestDibujo(unittest.TestCase):
         for nodo in nodos.values():
             if nodo.tipo != "inicio":
                 self.assertIn(nodo.padre, nodos)
+
+    def test_dibuja_busqueda_sin_correccion(self):
+        from autocorrector.visualizacion import dibujar_busqueda, seleccionar_nodos
+
+        resultado, traza = self.resolver("xyzxyz", max_niveles=3)
+        nodos = seleccionar_nodos(resultado, traza)
+
+        self.assertEqual(resultado.estado, "sin_correccion")
+        self.assertNotIn("meta", {n.tipo for n in nodos.values()})
+        self.assertTrue(dibujar_busqueda(resultado, traza).startswith(b"\x89PNG"))
 
     def test_dibuja_busqueda_incompleta(self):
         from autocorrector.visualizacion import dibujar_busqueda, seleccionar_nodos

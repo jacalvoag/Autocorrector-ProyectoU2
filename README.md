@@ -97,9 +97,13 @@ Se abre una ventana de escritorio donde se puede:
   búsqueda (`buscar_correccion(..., traza=lista)`), no de la ruta final.
 - Aceptar el cambio o rechazarlo para conservar la palabra original.
 
-La búsqueda corre en un hilo aparte con un presupuesto de 200,000 estados
-(`MAX_ESTADOS` en `autocorrector/controlador.py`). Si se agota, la
-interfaz lo indica y no presenta la palabra como corrección óptima. Si
+La búsqueda corre en un hilo aparte con dos límites en
+`autocorrector/controlador.py`: un presupuesto de 200,000 estados
+(`MAX_ESTADOS`) y un máximo de 3 operaciones por corrección
+(`MAX_NIVELES`). Si el presupuesto se agota, la interfaz lo indica y no
+presenta la palabra como corrección óptima. Si ninguna palabra del
+diccionario queda a 3 cambios o menos, indica que no hay una corrección
+cercana y conserva la palabra escrita. Si
 la palabra o el teclado cambian mientras se busca, el resultado anterior
 se descarta. La elección del presupuesto y la revisión contra la
 propuesta están en `docs/revision_propuesta.md`.
@@ -112,12 +116,15 @@ Desde la raíz del repositorio:
 python -m autocorrector.cli gstp --teclado qwerty
 python -m autocorrector.cli gatp --teclado aleatorio --semilla 2026
 python -m autocorrector.cli nmovte --teclado qwerty --grafo grafo.png
+python -m autocorrector.cli nmovte --max-niveles 2
 python -m unittest discover -s tests -v
 ```
 
 La consola muestra sugerencia, costo, ruta, estados expandidos,
-frontera máxima y tiempo. El estado `incompleta` no garantiza
-una sugerencia óptima.
+frontera máxima y tiempo. `--max-niveles N` cambia las operaciones
+máximas de la corrección (3 de forma predeterminada, `0` para quitar el
+límite). El estado `incompleta` no garantiza una sugerencia óptima y
+`sin_correccion` indica que no hay palabra a tantos cambios o menos.
 
 ## Contrato para la interfaz Flet
 
@@ -126,7 +133,9 @@ las palabras con `cargar_diccionario()`. Al terminar una palabra con
 espacio, elimina ese espacio y llama a:
 
 ```python
-buscar_correccion(palabra, teclado, diccionario, max_estados=...)
+buscar_correccion(
+    palabra, teclado, diccionario, max_estados=..., max_niveles=...
+)
 ```
 
 El resultado tiene `estado`, `sugerencia`, `costo`, `ruta`,
@@ -135,6 +144,8 @@ El resultado tiene `estado`, `sugerencia`, `costo`, `ruta`,
 - `valida`: conserva la palabra; A* no se ejecutó.
 - `sugerida`: muestra la sugerencia y espera Aceptar o Rechazar.
 - `incompleta`: informa que no hay una sugerencia óptima garantizada.
+- `sin_correccion`: ninguna palabra del diccionario queda a `max_niveles`
+  operaciones o menos; se conserva la palabra y no hay sugerencia.
 
 La búsqueda debe ejecutarse fuera del manejador de entrada. La
 interfaz asociará cada resultado con la palabra y distribución que

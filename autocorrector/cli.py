@@ -4,6 +4,7 @@ import sys
 from time import perf_counter
 
 from autocorrector.astar import buscar_correccion
+from autocorrector.controlador import MAX_NIVELES, texto_cambios
 from autocorrector.diccionario import cargar_diccionario
 from autocorrector.teclados import cargar_distribuciones, generar_aleatoria
 
@@ -30,6 +31,15 @@ def main(argv: list[str] | None = None) -> int:
         type=int,
         help="Presupuesto opcional; puede producir una búsqueda incompleta.",
     )
+    parser.add_argument(
+        "--max-niveles",
+        type=int,
+        default=MAX_NIVELES,
+        help=(
+            "Operaciones máximas de la corrección (predeterminado: "
+            f"{MAX_NIVELES}). Con 0 no hay límite."
+        ),
+    )
 
     parser.add_argument(
         "--grafo",
@@ -52,6 +62,9 @@ def main(argv: list[str] | None = None) -> int:
 
         teclado = teclados[argumentos.teclado]
 
+    if argumentos.max_niveles < 0:
+        parser.error("--max-niveles no puede ser negativo")
+
     diccionario = cargar_diccionario()
 
     try:
@@ -62,6 +75,7 @@ def main(argv: list[str] | None = None) -> int:
             teclado,
             diccionario,
             max_estados=argumentos.max_estados,
+            max_niveles=argumentos.max_niveles or None,
             traza=traza,
         )
         segundos = perf_counter() - inicio
@@ -78,6 +92,11 @@ def main(argv: list[str] | None = None) -> int:
         print("La palabra ya pertenece al diccionario.")
     elif resultado.estado == "incompleta":
         print("No se puede garantizar una sugerencia óptima.")
+    elif resultado.estado == "sin_correccion":
+        print(
+            "No hay una palabra del diccionario a "
+            f"{texto_cambios(argumentos.max_niveles)} o menos."
+        )
     else:
         print(f"Sugerencia: {resultado.sugerencia}")
         print(f"Costo mínimo: {resultado.costo}")

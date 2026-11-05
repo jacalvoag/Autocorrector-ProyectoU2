@@ -22,6 +22,7 @@ from autocorrector.controlador import (
     Controlador,
     Vista,
     posiciones_cambiadas,
+    texto_cambios,
 )
 from autocorrector.diccionario import cargar_diccionario
 from autocorrector.teclados import Distribucion, cargar_distribuciones
@@ -43,6 +44,7 @@ RESALTE = ft.Colors.AMBER_200
 RESALTE_BORDE = ft.Colors.AMBER_700
 EXITO = ft.Colors.GREEN_800
 ERROR = ft.Colors.RED_700
+AVISO = ft.Colors.AMBER_900
 
 ESTILO_AVISO = {
     "info": (ft.Icons.INFO_OUTLINE, PRIMARIO, PRIMARIO_SUAVE),
@@ -955,7 +957,10 @@ class Aplicacion:
 
     def _dibujar_resultado(self, vista: Vista) -> None:
         resultado = vista.resultado
-        visible = vista.fase in ("sugerida", "incompleta") and resultado is not None
+        visible = (
+            vista.fase in ("sugerida", "incompleta", "sin_correccion")
+            and resultado is not None
+        )
         self.panel_resultado.visible = visible
 
         if not visible:
@@ -990,6 +995,25 @@ class Aplicacion:
             self.nota_resultado.value = f"Teclado usado: {vista.teclado.nombre}."
             self.boton_aceptar.visible = True
             self.boton_rechazar.content = "Rechazar"
+        elif vista.fase == "sin_correccion":
+            self.titulo_resultado.value = resultado.original
+            self.etiqueta_estado.value = "Sin corrección cercana"
+            self.etiqueta_estado.color = AVISO
+            self.caja_estado.bgcolor = ft.Colors.AMBER_50
+            costo = metrica(
+                "Límite de cambios",
+                str(vista.max_niveles),
+                "Operaciones máximas que puede tener una corrección.",
+            )
+            self.titulo_ruta.visible = False
+            self.ruta.controls = []
+            self.nota_resultado.value = (
+                "Ninguna palabra del diccionario queda a "
+                f"{texto_cambios(vista.max_niveles)} o menos de la que escribiste. "
+                f"Teclado usado: {vista.teclado.nombre}."
+            )
+            self.boton_aceptar.visible = False
+            self.boton_rechazar.content = "Conservar original"
         else:
             self.titulo_resultado.value = resultado.original
             self.etiqueta_estado.value = "Búsqueda incompleta"

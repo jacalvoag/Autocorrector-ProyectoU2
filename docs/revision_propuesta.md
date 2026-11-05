@@ -33,6 +33,7 @@ Estados usados: **Cumple**, **Pendiente** (falta hacerlo) y
 | 18 | Métricas de rendimiento visibles | Costo, estados expandidos, frontera máxima y tiempo en la CLI y en la interfaz | La comparación con costo uniforme solo existe en una prueba. Para la exposición convendría mostrarla en la interfaz o en la CLI | Rafael / José | Pendiente |
 | 19 | Visualización del recorrido de búsqueda | `buscar_correccion` acepta `traza` y agrega un `Expansion` por cada estado expandido. `arbol.py` elige y acomoda los nodos; la interfaz los muestra en un grafo interactivo (paso a paso, animación, clic en un nodo) y `visualizacion.py` exporta la misma figura a PNG con matplotlib (`cli.py --grafo`). `tests/test_visualizacion.py` | Ninguno | Rafael | Cumple |
 | 20 | Las posiciones de las teclas representan el teclado real | Las filas empiezan en 0, 0.25 y 0.75 en QWERTY, AZERTY y Dvorak, como en un teclado físico. En QWERTY la G tiene como vecinas a T, Y, F, H, V y B | Ninguno. Antes las filas empezaban en 0, 0.5 y 1.5 y la B no contaba como vecina de la G | José / Rafael | Cumple |
+| 21 | Límite de niveles de la corrección: la búsqueda no sigue combinando palabras sin parar (observación después de la exposición: un límite de 2 o 3 niveles) | `buscar_correccion(..., max_niveles=)`. La interfaz y la CLI usan `MAX_NIVELES = 3`. Si ninguna palabra queda a tantos cambios o menos, el estado es `sin_correccion` y la palabra se conserva. `TestLimiteDeNiveles`, `test_sin_correccion_cercana_conserva_la_entrada` | Ninguno. Antes solo existía el presupuesto de estados, que no limita cuánto se aleja la sugerencia | Rafael | Cumple |
 
 ## Presupuesto de búsqueda (`max_estados`)
 
@@ -48,8 +49,10 @@ vecindad de la propuesta:
 | 200,000 | 0 de 94 | 0 de 58 | 0.99 s |
 | 400,000 | 0 de 94 | 0 de 58 | 0.90 s |
 
-Con 200,000 todas las palabras medidas terminan completas. Una entrada sin
-sentido como `xyzxyz` se corta como incompleta en unos 1.4 s.
+Con 200,000 todas las palabras medidas terminan completas. Sin límite de
+niveles, una entrada sin sentido como `xyzxyz` se corta como incompleta en
+unos 1.4 s; con el límite de 3 niveles de la interfaz termina como sin
+corrección en unos 0.5 s.
 
 En la versión anterior del núcleo se necesitaban 400,000 estados y el peor
 caso tardaba 3.1 s. La mejora viene sobre todo de calcular la heurística
@@ -59,6 +62,59 @@ letras.
 Los tiempos se midieron en el contenedor de desarrollo (Linux,
 Python 3.13). Si en Windows la ventana tarda demasiado, el valor se baja
 en `controlador.py`.
+
+## Límite de niveles (`max_niveles`)
+
+Un nivel es una operación (sustituir, insertar, eliminar o intercambiar).
+`buscar_correccion(..., max_niveles=3)` solo acepta correcciones de hasta
+3 operaciones, y dentro de ese límite sigue devolviendo la de menor costo.
+La interfaz y la CLI lo usan con `MAX_NIVELES = 3` (en `controlador.py`);
+en la CLI se cambia con `--max-niveles N` y `0` lo quita.
+
+Cómo funciona:
+
+- El estado de la búsqueda pasa a ser `(palabra, nivel)`. Una palabra puede
+  alcanzarse barata pero con muchas operaciones, o cara pero con pocas, y
+  las dos rutas importan. Una ruta descarta a otra de la misma palabra solo
+  si cuesta igual o menos y usa igual o menos niveles.
+- En el último nivel solo se generan palabras del diccionario, porque ya no
+  se podrían expandir.
+- Como cada operación cuesta 2 como máximo, una palabra con `h` de costo
+  restante necesita al menos `h / 2` operaciones más. Si no caben en los
+  niveles que quedan, se descarta. La heurística sigue siendo admisible, así
+  que esta poda no pierde ninguna corrección posible.
+- Si ninguna palabra del diccionario queda a `max_niveles` operaciones o
+  menos, el resultado es `sin_correccion`: no hay sugerencia, costo ni ruta,
+  y la interfaz conserva la palabra escrita. Es distinto de `incompleta`,
+  que quiere decir que se agotó el presupuesto de estados antes de saber si
+  había corrección.
+
+Por qué 3: los tres casos del reporte necesitan exactamente 3 operaciones.
+Con 2, `nmovte` se corrige a `monte` (costo 4) y `cyqrot` en Dvorak queda
+sin corrección. Con palabras cortas, 3 cambios ya pueden alterar casi toda la
+palabra; si hiciera falta, el límite puede depender del largo.
+
+Medición con 144 palabras del diccionario con 1, 2 y 3 errores al azar
+(48 de cada una, repartidas entre QWERTY, AZERTY, Dvorak y un teclado
+aleatorio con semilla 7), comparando con la búsqueda sin límite:
+
+- Con 1 y 2 errores, las 96 sugerencias son idénticas.
+- Con 3 errores, 43 de 48 son idénticas, 4 eran incompletas sin límite y
+  ahora se resuelven, y 1 cambia de palabra con el mismo costo (`crup` en 4
+  operaciones contra `echa` en 3).
+- Tiempo máximo de una búsqueda: 3.31 s sin límite y 0.53 s con límite.
+- Frontera máxima media: 43,491 sin límite y 6,967 con límite.
+
+Los tres casos del reporte con el límite de 3 (estados expandidos y
+frontera máxima, contra la búsqueda sin límite):
+
+- `nmovte` en QWERTY: 524 y 10,472 (antes 542 y 50,751).
+- `cyqrot` en Dvorak: 215 y 7,365 (antes 266 y 26,366).
+- `gstp` en la aleatoria con semilla 2026: 321 y 16,811 (antes 348 y 52,219).
+
+La corrección y el costo de los tres son los mismos. La prueba
+`test_coincide_con_la_referencia_sin_podas` compara el resultado contra una
+búsqueda de costo uniforme sobre `(palabra, nivel)` sin heurística ni podas.
 
 ## Pendientes
 

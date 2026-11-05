@@ -28,6 +28,27 @@ class TestCLI(unittest.TestCase):
         self.assertIn("Estado: incompleta", proceso.stdout)
         self.assertNotIn("Costo mínimo:", proceso.stdout)
 
+    def test_informa_sin_correccion_cercana(self):
+        proceso = self.ejecutar("xyzxyz")
+
+        self.assertEqual(proceso.returncode, 0, proceso.stderr)
+        self.assertIn("Estado: sin_correccion", proceso.stdout)
+        self.assertIn("3 cambios o menos", proceso.stdout)
+        self.assertNotIn("Costo mínimo:", proceso.stdout)
+
+    def test_max_niveles_cambia_el_resultado(self):
+        dos = self.ejecutar("nmovte", "--max-niveles", "2")
+        sin_limite = self.ejecutar("nmovte", "--max-niveles", "0")
+
+        self.assertIn("Sugerencia: monte", dos.stdout)
+        self.assertIn("Sugerencia: nombre", sin_limite.stdout)
+
+    def test_rechaza_max_niveles_negativo(self):
+        proceso = self.ejecutar("gstp", "--max-niveles", "-1")
+
+        self.assertEqual(proceso.returncode, 2)
+        self.assertIn("--max-niveles", proceso.stderr)
+
     def test_rechaza_entrada_invalida(self):
         proceso = self.ejecutar("gáto")
 
