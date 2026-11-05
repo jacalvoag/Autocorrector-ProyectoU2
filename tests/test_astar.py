@@ -9,7 +9,7 @@ from autocorrector.astar import (
     heuristica_directa,
     indice_heuristica,
 )
-from autocorrector.diccionario import cargar_diccionario
+from autocorrector.diccionario import Diccionario, cargar_diccionario
 from autocorrector.teclados import cargar_distribuciones
 
 
@@ -39,8 +39,14 @@ def costo_uniforme(inicio, metas, teclado):
 def costo_uniforme_con_niveles(inicio, metas, teclado, niveles):
     """Referencia sin heurística ni podas: costo uniforme sobre (palabra, nivel).
 
-    Devuelve (meta, costo) con la meta alfabética más barata, o (None, None).
+    Devuelve (meta, costo) con la meta más barata (a igual costo, la más
+    frecuente y luego la alfabética), o (None, None).
     """
+    frecuencias = getattr(metas, "frecuencias", {})
+
+    def preferencia(palabra):
+        return (-frecuencias.get(palabra, 0), palabra)
+
     frontera = [(0, inicio, 0)]
     mejor = {(inicio, 0): 0}
     meta = None
@@ -59,7 +65,10 @@ def costo_uniforme_con_niveles(inicio, metas, teclado, niveles):
             if (
                 costo_meta is None
                 or costo < costo_meta
-                or (costo == costo_meta and estado < meta)
+                or (
+                    costo == costo_meta
+                    and preferencia(estado) < preferencia(meta)
+                )
             ):
                 meta, costo_meta = estado, costo
 
@@ -102,6 +111,53 @@ class TestAStar(unittest.TestCase):
 
         self.assertEqual(resultado.sugerencia, "gatl")
         self.assertEqual(resultado.costo, 1)
+
+    def test_desempate_por_frecuencia(self):
+        # Mismo costo: gatl (alfabética) contra gato (más usada).
+        vocabulario = Diccionario(
+            {"gato", "gatl"}, {"gato": 5.2, "gatl": 1.1}
+        )
+
+        resultado = buscar_correccion(
+            "gatp", self.teclados["qwerty"], vocabulario
+        )
+
+        self.assertEqual(resultado.sugerencia, "gato")
+        self.assertEqual(resultado.costo, 1)
+
+    def test_frecuencia_no_supera_al_costo(self):
+        # gatl cuesta menos aunque se use poquísimo: el costo manda.
+        vocabulario = Diccionario(
+            {"gatl", "gatos"}, {"gatl": 0.5, "gatos": 6.0}
+        )
+
+        resultado = buscar_correccion(
+            "gatp", self.teclados["qwerty"], vocabulario
+        )
+
+        self.assertEqual(resultado.sugerencia, "gatl")
+
+    def test_misma_frecuencia_desempata_alfabeticamente(self):
+        vocabulario = Diccionario(
+            {"gato", "gatl"}, {"gato": 3.0, "gatl": 3.0}
+        )
+
+        resultado = buscar_correccion(
+            "gatp", self.teclados["qwerty"], vocabulario
+        )
+
+        self.assertEqual(resultado.sugerencia, "gatl")
+
+    def test_frecuencia_con_limite_de_niveles(self):
+        vocabulario = Diccionario(
+            {"gato", "gatl"}, {"gato": 5.2, "gatl": 1.1}
+        )
+
+        resultado = buscar_correccion(
+            "gatp", self.teclados["qwerty"], vocabulario, max_niveles=2
+        )
+
+        self.assertEqual(resultado.sugerencia, "gato")
 
     def test_ruta_y_costos(self):
         resultado = buscar_correccion(
@@ -317,7 +373,7 @@ class TestLimiteDeNiveles(unittest.TestCase):
             "nmovte", self.teclados["qwerty"], self.diccionario, max_niveles=2
         )
 
-        self.assertEqual(resultado.sugerencia, "monte")
+        self.assertEqual(resultado.sugerencia, "norte")
         self.assertEqual(resultado.costo, 4)
         self.assertEqual(len(resultado.ruta), 2)
 

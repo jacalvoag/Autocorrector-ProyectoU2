@@ -231,7 +231,10 @@ def buscar_correccion(
     """Busca con A* la corrección de menor costo.
 
     ``max_niveles`` limita cuántas operaciones puede tener la corrección.
-    Dentro de ese límite el resultado sigue siendo el de menor costo. Si
+    Dentro de ese límite el resultado sigue siendo el de menor costo. Entre
+    metas de igual costo se elige la más frecuente del diccionario (si el
+    diccionario trae ``frecuencias``) y, a igual frecuencia, la primera en
+    orden alfabético. Si
     ninguna palabra del diccionario se alcanza con tantas operaciones o
     menos, el estado es ``sin_correccion``. Sin límite (``None``) la
     búsqueda se comporta como antes.
@@ -254,6 +257,13 @@ def buscar_correccion(
         return Resultado("valida", palabra, palabra, 0, (), 0, 0)
 
     heuristica = indice_heuristica(diccionario).calcular
+    frecuencias = getattr(diccionario, "frecuencias", {})
+
+    def preferencia(meta: str) -> tuple[float, str]:
+        # Entre metas del mismo costo gana la más usada; si también empatan
+        # en uso, la primera en orden alfabético.
+        return (-frecuencias.get(meta, 0), meta)
+
     limitar = max_niveles is not None
     # Con límite, el estado de la búsqueda es (palabra, nivel): una palabra
     # puede alcanzarse barata pero con muchas operaciones, o cara pero con
@@ -291,7 +301,10 @@ def buscar_correccion(
                 or g < costo_meta
                 or (
                     g == costo_meta
-                    and (mejor_meta is None or estado < mejor_meta)
+                    and (
+                        mejor_meta is None
+                        or preferencia(estado) < preferencia(mejor_meta)
+                    )
                 )
             ):
                 mejor_meta = estado
