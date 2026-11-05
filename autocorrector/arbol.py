@@ -32,7 +32,12 @@ def seleccionar_nodos(
     limite: int = LIMITE_PREDETERMINADO,
 ) -> dict[str, Nodo]:
     """Los primeros estados expandidos más todos los de la ruta."""
-    por_estado = {expansion.estado: expansion for expansion in traza}
+    # Con límite de niveles una palabra podría expandirse dos veces (con
+    # distinto costo y número de pasos); el árbol dibuja la primera.
+    por_estado: dict[str, Expansion] = {}
+    for expansion in traza:
+        por_estado.setdefault(expansion.estado, expansion)
+
     en_ruta = {paso.destino for paso in resultado.ruta}
     meta = resultado.sugerencia if resultado.estado == "sugerida" else None
     nodos: dict[str, Nodo] = {}
@@ -47,6 +52,9 @@ def seleccionar_nodos(
         return "explorado"
 
     for expansion in list(traza)[:limite]:
+        if expansion.estado in nodos:
+            continue
+
         nodos[expansion.estado] = Nodo(
             expansion.estado,
             expansion.padre,

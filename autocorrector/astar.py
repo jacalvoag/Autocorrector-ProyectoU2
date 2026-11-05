@@ -33,7 +33,7 @@ class Expansion:
 
 @dataclass(frozen=True)
 class Resultado:
-    estado: Literal["valida", "sugerida", "incompleta"]
+    estado: Literal["valida", "sugerida", "incompleta", "sin_correccion"]
     original: str
     sugerencia: str | None
     costo: int | None
@@ -200,13 +200,20 @@ def heuristica_directa(estado: str, diccionario: frozenset[str]) -> int:
     )
 
 
-def _reconstruir(meta: str, anteriores: dict[str, Paso]) -> tuple[Paso, ...]:
+def _reconstruir(
+    meta: str,
+    nivel: int,
+    anteriores: dict[tuple[str, int], Paso],
+    nivel_por_paso: int,
+) -> tuple[Paso, ...]:
+    """Camina hacia atrás desde la meta. Cada paso baja un nivel si se limita."""
     ruta: list[Paso] = []
+    clave = (meta, nivel)
 
-    while meta in anteriores:
-        paso = anteriores[meta]
+    while clave in anteriores:
+        paso = anteriores[clave]
         ruta.append(paso)
-        meta = paso.origen
+        clave = (paso.origen, clave[1] - nivel_por_paso)
 
     ruta.reverse()
     return tuple(ruta)
@@ -218,9 +225,16 @@ def buscar_correccion(
     diccionario: frozenset[str],
     *,
     max_estados: int | None = None,
+    max_niveles: int | None = None,
     traza: list[Expansion] | None = None,
 ) -> Resultado:
     """Busca con A* la corrección de menor costo.
+
+    ``max_niveles`` limita cuántas operaciones puede tener la corrección.
+    Dentro de ese límite el resultado sigue siendo el de menor costo. Si
+    ninguna palabra del diccionario se alcanza con tantas operaciones o
+    menos, el estado es ``sin_correccion``. Sin límite (``None``) la
+    búsqueda se comporta como antes.
 
     Si se pasa una lista en ``traza``, se agrega un ``Expansion`` por cada
     estado expandido, en orden. No cambia el resultado de la búsqueda.
@@ -233,27 +247,39 @@ def buscar_correccion(
     if max_estados is not None and max_estados < 1:
         raise ValueError("max_estados debe ser positivo.")
 
+    if max_niveles is not None and max_niveles < 1:
+        raise ValueError("max_niveles debe ser positivo.")
+
     if palabra in diccionario:
         return Resultado("valida", palabra, palabra, 0, (), 0, 0)
 
     heuristica = indice_heuristica(diccionario).calcular
+    limitar = max_niveles is not None
+    # Con límite, el estado de la búsqueda es (palabra, nivel): una palabra
+    # puede alcanzarse barata pero con muchas operaciones, o cara pero con
+    # pocas, y las dos rutas importan. Sin límite el nivel siempre es 0.
+    sube = 1 if limitar else 0
 
     # La cola prioriza f, luego g y finalmente la palabra.
-    frontera: list[tuple[int, int, str]] = [
-        (heuristica(palabra), 0, palabra)
+    frontera: list[tuple[int, int, str, int]] = [
+        (heuristica(palabra), 0, palabra, 0)
     ]
-    mejor_g = {palabra: 0}
-    anteriores: dict[str, Paso] = {}
+    mejor_g = {(palabra, 0): 0}
+    anteriores: dict[tuple[str, int], Paso] = {}
+    # Pares (g, nivel) vigentes de cada palabra; uno desplaza a otro si
+    # cuesta igual o menos y usa igual o menos niveles.
+    vigentes: dict[str, list[tuple[int, int]]] = {palabra: [(0, 0)]}
 
     mejor_meta: str | None = None
+    nivel_meta = 0
     costo_meta: int | None = None
     expandidos = 0
     frontera_maxima = 1
 
     while frontera:
-        f, g, estado = heappop(frontera)
+        f, g, estado, nivel = heappop(frontera)
 
-        if g != mejor_g[estado]:
+        if mejor_g.get((estado, nivel)) != g:
             continue  # Entrada obsoleta de la cola.
 
         if costo_meta is not None and f > costo_meta:
@@ -269,6 +295,7 @@ def buscar_correccion(
                 )
             ):
                 mejor_meta = estado
+                nivel_meta = nivel
                 costo_meta = g
 
             continue
@@ -276,7 +303,7 @@ def buscar_correccion(
         expandidos += 1
 
         if traza is not None:
-            llegada = anteriores.get(estado)
+            llegada = anteriores.get((estado, nivel))
             traza.append(
                 Expansion(
                     expandidos,
@@ -288,15 +315,39 @@ def buscar_correccion(
                 )
             )
 
+        nuevo_nivel = nivel + sube
+
         for destino, operacion, costo in _sucesores(estado, teclado):
             nuevo_g = g + costo
 
-            if nuevo_g >= mejor_g.get(destino, float("inf")):
-                continue
+            if limitar:
+                # En el último nivel solo sirve una palabra del diccionario.
+                if nuevo_nivel == max_niveles and destino not in diccionario:
+                    continue
+
+                if any(
+                    g0 <= nuevo_g and n0 <= nuevo_nivel
+                    for g0, n0 in vigentes.get(destino, ())
+                ):
+                    continue
+
+                nuevo_h = heuristica(destino)
+
+                # Cada operación cuesta 2 como máximo: si faltan al menos
+                # h de costo, hacen falta al menos h/2 operaciones.
+                if (nuevo_h + 1) // 2 > max_niveles - nuevo_nivel:
+                    continue
+            else:
+                if nuevo_g >= mejor_g.get((destino, 0), float("inf")):
+                    continue
+
+                nuevo_h = heuristica(destino)
+
+            clave = (destino, nuevo_nivel)
 
             if (
                 max_estados is not None
-                and destino not in mejor_g
+                and clave not in mejor_g
                 and len(mejor_g) >= max_estados
             ):
                 return Resultado(
@@ -309,16 +360,36 @@ def buscar_correccion(
                     frontera_maxima,
                 )
 
-            mejor_g[destino] = nuevo_g
-            anteriores[destino] = Paso(
-                estado, destino, operacion, costo
-            )
-            nuevo_f = nuevo_g + heuristica(destino)
-            heappush(frontera, (nuevo_f, nuevo_g, destino))
+            if limitar:
+                restantes = []
+
+                for g0, n0 in vigentes.get(destino, ()):
+                    if nuevo_g <= g0 and nuevo_nivel <= n0:
+                        mejor_g.pop((destino, n0), None)
+                    else:
+                        restantes.append((g0, n0))
+
+                restantes.append((nuevo_g, nuevo_nivel))
+                vigentes[destino] = restantes
+
+            mejor_g[clave] = nuevo_g
+            anteriores[clave] = Paso(estado, destino, operacion, costo)
+            heappush(frontera, (nuevo_g + nuevo_h, nuevo_g, destino, nuevo_nivel))
 
         frontera_maxima = max(frontera_maxima, len(frontera))
 
     if mejor_meta is None or costo_meta is None:
+        if limitar:
+            return Resultado(
+                "sin_correccion",
+                palabra,
+                None,
+                None,
+                (),
+                expandidos,
+                frontera_maxima,
+            )
+
         raise RuntimeError("No se encontró una palabra alcanzable.")
 
     return Resultado(
@@ -326,7 +397,7 @@ def buscar_correccion(
         palabra,
         mejor_meta,
         costo_meta,
-        _reconstruir(mejor_meta, anteriores),
+        _reconstruir(mejor_meta, nivel_meta, anteriores, sube),
         expandidos,
         frontera_maxima,
     )
