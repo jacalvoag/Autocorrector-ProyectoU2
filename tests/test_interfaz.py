@@ -563,10 +563,11 @@ class TestVistaFlet(unittest.TestCase):
             actual = pila.pop()
 
             if isinstance(actual, ft.Text):
-                encontrados.append(str(actual.value or ""))
-
-                for tramo in actual.spans or []:
-                    encontrados.append(str(tramo.text))
+                encontrados.append(
+                    "".join(str(tramo.text) for tramo in actual.spans)
+                    if actual.spans
+                    else str(actual.value or "")
+                )
 
             for hijo in getattr(actual, "controls", None) or []:
                 pila.append(hijo)
@@ -578,36 +579,59 @@ class TestVistaFlet(unittest.TestCase):
 
         return encontrados
 
-    def test_lateral_muestra_los_niveles_hasta_el_limite(self):
+    def test_arbol_del_limite_dibuja_niveles_y_palabras(self):
         self.app.controlador.actualizar_entrada("nmovte ")
         textos = self.textos(self.app.grafo.lateral)
 
         self.assertIn("Límite: 3 cambios", textos)
-        self.assertIn("Nivel 3 de 3", textos)
+        self.assertIn("Escribiste", textos)
+        self.assertIn("Nivel 1", textos)
+        self.assertIn("Nivel 3 · límite", textos)
+        self.assertIn("nmovte", textos)
         self.assertIn("nombre", textos)
-        self.assertTrue(any(t.startswith("Último nivel") for t in textos))
 
         self.app.controlador.cambiar_max_niveles(2)
         self.app.controlador.actualizar_entrada("nmovte ")
         textos = self.textos(self.app.grafo.lateral)
 
         self.assertIn("Límite: 2 cambios", textos)
-        self.assertIn("Nivel 2 de 2", textos)
-        self.assertNotIn("Nivel 3 de 3", textos)
+        self.assertIn("Nivel 2 · límite", textos)
+        self.assertNotIn("Nivel 3 · límite", textos)
 
-    def test_lateral_cuenta_combinaciones_generadas_y_cortadas(self):
+    def test_arbol_del_limite_cuenta_combinaciones_cortadas(self):
         self.app.controlador.actualizar_entrada("nmovte ")
         textos = " ".join(self.textos(self.app.grafo.lateral))
 
-        self.assertIn("combinaciones", textos)
-        self.assertIn("el límite descartó", textos)
+        self.assertIn("combinaciones cortadas por el límite", textos)
 
-    def test_sin_correccion_muestra_los_niveles_vacios(self):
+    def test_arbol_del_limite_marca_meta_y_descartes(self):
+        import flet as ft
+
+        self.app.controlador.actualizar_entrada("pstp ")
+        iconos = []
+        pila = [self.app.grafo.lateral]
+
+        while pila:
+            actual = pila.pop()
+
+            if isinstance(actual, ft.Icon):
+                iconos.append(actual.icon)
+
+            pila.extend(getattr(actual, "controls", None) or [])
+            contenido = getattr(actual, "content", None)
+
+            if contenido is not None and not isinstance(contenido, str):
+                pila.append(contenido)
+
+        self.assertIn(ft.Icons.CHECK_CIRCLE, iconos)
+        self.assertIn(ft.Icons.CLOSE, iconos)
+
+    def test_sin_correccion_dibuja_el_arbol_vacio(self):
         self.app.controlador.actualizar_entrada("xyzxyz ")
         textos = self.textos(self.app.grafo.lateral)
 
         self.assertIn("Límite: 3 cambios", textos)
-        self.assertIn("—", textos)
+        self.assertIn("xyzxyz", textos)
 
     def test_muestra_los_empates_con_su_frecuencia(self):
         self.app.controlador.cambiar_max_niveles(2)

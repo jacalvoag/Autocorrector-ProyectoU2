@@ -11,6 +11,7 @@ el núcleo; no se reconstruye ni se inventa el recorrido.
 """
 
 import asyncio
+import math
 
 import flet as ft
 import flet.canvas as cv
@@ -262,6 +263,14 @@ ANCHO_NODO = 160
 ALTO_NODO = 66
 COLUMNA = 240
 FILA = 78
+OVALO_ANCHO = 104
+OVALO_ALTO = 40
+SEPARACION_X = 116
+SEPARACION_Y = 96
+ETIQUETA_NIVEL = 88
+LIMITE_FONDO = ft.Colors.RED_50
+LIMITE_BORDE = ft.Colors.RED_200
+LIMITE_TEXTO = ft.Colors.RED_700
 ENCABEZADO = 34  # Alto de la fila con «Nivel 1 de 3», «Nivel 2 de 3»...
 MAX_EMPATES_EN_ARBOL = 4  # Con la elegida son las 5 más frecuentes.
 MAX_EMPATES_EN_PANEL = 5
@@ -384,19 +393,20 @@ class GrafoBusqueda:
                         [
                             ft.Container(
                                 ft.Row([self.desplazable], scroll=ft.ScrollMode.AUTO),
-                                col={"xs": 12, "lg": 8},
+                                col={"xs": 12, "lg": 6},
                             ),
                             ft.Container(
                                 ft.Column([self.lateral, self.extra], spacing=10),
-                                col={"xs": 12, "lg": 4},
+                                col={"xs": 12, "lg": 6},
                             ),
                         ],
                         spacing=16,
-                        run_spacing=12,
+                        run_spacing=16,
                     ),
+                    ft.Container(height=6),
                     self.caja_explicacion,
                 ],
-                spacing=10,
+                spacing=14,
             ),
         )
 
@@ -575,158 +585,235 @@ class GrafoBusqueda:
         self.explicacion.value = self._explicar(self._nodos[destacado], final)
 
     def _lateral(self, visibles: list[Nodo], final: bool) -> list[ft.Control]:
-        """Los niveles de la búsqueda, uno bajo otro, hasta llegar al límite.
+        """Árbol de arriba hacia abajo: un nivel por cambio, hasta el límite.
 
-        Cada nivel es un cambio. Se van mostrando al mismo ritmo que el
-        árbol; al final quedan las palabras del camino elegido.
+        La palabra escrita va arriba y cada nivel muestra las palabras a un
+        cambio más de distancia, con la letra cambiada resaltada. Las ramas
+        que no llevaron a la meta llevan una X y la meta, una palomita. El
+        último nivel permitido va en rojo suave y dice cuántas combinaciones
+        cortó el límite.
         """
         limite = self._max_niveles
+        resultado = self._resultado
+        info = {n.nivel: n for n in (resultado.niveles if resultado else ())}
         ultimo = limite if limite is not None else self._columnas - 1
-        info = {n.nivel: n for n in (self._resultado.niveles if self._resultado else ())}
         meta = next((n for n in self._nodos.values() if n.tipo == "meta"), None)
         columna_meta = self._lugar[meta.estado][0] if meta else None
+        mostrados = list(self._nodos.values()) if final else visibles
+        ids = {n.estado for n in mostrados}
+        actual = visibles[-1].estado if visibles else None
 
-        por_columna: dict[int, Nodo] = {}
-        origen = (
-            [n for n in self._nodos.values() if n.tipo in ("inicio", "ruta", "meta")]
-            if final
-            else visibles
+        anchura = max(f for _, f in self._lugar.values()) + 1
+        ancho = int(ETIQUETA_NIVEL + 16 + anchura * SEPARACION_X)
+        alto = int((ultimo + 1) * SEPARACION_Y + 4)
+
+        def centro(estado: str) -> tuple[float, float]:
+            nivel, fila = self._lugar[estado]
+            x = ETIQUETA_NIVEL + 8 + (fila + 0.5) * SEPARACION_X
+            return x, nivel * SEPARACION_Y + 8 + OVALO_ALTO / 2
+
+        franjas: list[ft.Control] = []
+        for nivel in range(ultimo + 1):
+            es_limite = limite is not None and nivel == limite
+            nombre = (
+                "Escribiste"
+                if nivel == 0
+                else f"Nivel {nivel}" + (" · límite" if es_limite else "")
+            )
+            franjas.append(
+                ft.Container(
+                    left=0,
+                    top=nivel * SEPARACION_Y,
+                    width=ancho,
+                    height=SEPARACION_Y - 6,
+                    border_radius=8,
+                    bgcolor=LIMITE_FONDO if es_limite else PRIMARIO_SUAVE,
+                    border=ft.Border.all(1, LIMITE_BORDE if es_limite else BORDE),
+                    content=ft.Text(
+                        nombre,
+                        size=11,
+                        weight=ft.FontWeight.BOLD,
+                        color=LIMITE_TEXTO if es_limite else PRIMARIO,
+                    ),
+                    padding=ft.Padding.only(left=8, top=6),
+                )
+            )
+
+        lineas: list[cv.Shape] = []
+        for nodo_ in mostrados:
+            if nodo_.padre not in ids or nodo_.padre not in self._lugar:
+                continue
+
+            x1, y1 = centro(nodo_.padre)
+            x2, y2 = centro(nodo_.estado)
+            y1 += OVALO_ALTO / 2
+            y2 -= OVALO_ALTO / 2
+            camino = final and nodo_.tipo in ("ruta", "meta")
+            pintura = ft.Paint(
+                color=PRIMARIO if camino else GRIS_BORDE,
+                stroke_width=3 if camino else 1.5,
+            )
+            lineas.append(cv.Line(x1, y1, x2, y2, paint=pintura))
+            angulo = math.atan2(y2 - y1, x2 - x1)
+
+            for lado in (-0.45, 0.45):
+                lineas.append(
+                    cv.Line(
+                        x2,
+                        y2,
+                        x2 - 9 * math.cos(angulo + lado),
+                        y2 - 9 * math.sin(angulo + lado),
+                        paint=pintura,
+                    )
+                )
+
+        ovalos: list[ft.Control] = []
+        for nodo_ in mostrados:
+            x, y = centro(nodo_.estado)
+            es_meta = final and nodo_.tipo == "meta"
+            en_camino = final and nodo_.tipo in ("ruta", "inicio")
+
+            if es_meta:
+                fondo, borde, grosor = ft.Colors.GREEN_50, EXITO, 3
+            elif en_camino:
+                fondo, borde, grosor = SUPERFICIE, PRIMARIO, 3
+            elif nodo_.estado == actual and not final:
+                fondo, borde, grosor = RESALTE, RESALTE_BORDE, 2
+            elif nodo_.tipo == "inicio":
+                fondo, borde, grosor = PRIMARIO_SUAVE, PRIMARIO, 2
+            else:
+                fondo, borde, grosor = GRIS_FONDO, GRIS_BORDE, 1
+
+            marcadas: frozenset[int] = frozenset()
+            if nodo_.padre:
+                _, marcadas = posiciones_cambiadas(
+                    Paso(nodo_.padre, nodo_.estado, nodo_.operacion or "", 0)
+                )
+
+            ovalos.append(
+                ft.Container(
+                    left=x - OVALO_ANCHO / 2,
+                    top=y - OVALO_ALTO / 2,
+                    width=OVALO_ANCHO,
+                    height=OVALO_ALTO,
+                    border_radius=OVALO_ALTO / 2,
+                    bgcolor=fondo,
+                    border=ft.Border.all(grosor, borde),
+                    alignment=ft.Alignment.CENTER,
+                    tooltip=f"g {nodo_.g} + h {nodo_.h} = f {nodo_.f}",
+                    content=palabra_marcada(nodo_.estado, marcadas, 15),
+                )
+            )
+
+            insignia = None
+            if es_meta:
+                insignia = ft.Icon(ft.Icons.CHECK_CIRCLE, color=EXITO, size=22)
+            elif nodo_.tipo == "explorado" and (final or nodo_.estado != actual):
+                insignia = ft.Container(
+                    width=20,
+                    height=20,
+                    border_radius=10,
+                    bgcolor=RESALTE,
+                    border=ft.Border.all(1, ERROR),
+                    alignment=ft.Alignment.CENTER,
+                    content=ft.Icon(ft.Icons.CLOSE, color=ERROR, size=14),
+                )
+
+            if insignia is not None:
+                ovalos.append(
+                    ft.Container(
+                        left=x + OVALO_ANCHO / 2 - 14,
+                        top=y - OVALO_ALTO / 2 - 9,
+                        content=insignia,
+                    )
+                )
+
+        notas: list[ft.Control] = []
+
+        def nota(nivel: int, texto: str, color: str, negrita: bool = False) -> None:
+            notas.append(
+                ft.Container(
+                    left=ETIQUETA_NIVEL + 8,
+                    top=nivel * SEPARACION_Y + SEPARACION_Y - 28,
+                    width=ancho - ETIQUETA_NIVEL - 16,
+                    content=ft.Text(
+                        texto,
+                        size=11,
+                        color=color,
+                        weight=ft.FontWeight.BOLD if negrita else ft.FontWeight.NORMAL,
+                    ),
+                )
+            )
+
+        if final:
+            for nivel in range(1, ultimo + 1):
+                datos = info.get(nivel)
+                es_limite = limite is not None and nivel == limite
+                alcanzado = columna_meta is not None and nivel <= columna_meta
+
+                if es_limite and datos and datos.podados:
+                    nota(
+                        nivel,
+                        f"{datos.podados:,} combinaciones cortadas por el límite "
+                        f"(de {datos.generados:,} generadas)",
+                        LIMITE_TEXTO,
+                        True,
+                    )
+                elif es_limite:
+                    nota(nivel, "Límite: aquí no se explora más", LIMITE_TEXTO, True)
+                elif not alcanzado and meta is not None:
+                    detalle = (
+                        f" ({datos.generados:,} combinaciones posibles)"
+                        if datos and datos.expandidos
+                        else ""
+                    )
+                    nota(nivel, f"no hizo falta llegar aquí{detalle}", TEXTO_SECUNDARIO)
+                elif meta is None and datos and datos.generados:
+                    nota(
+                        nivel,
+                        f"{datos.generados:,} combinaciones, ninguna es palabra válida",
+                        TEXTO_SECUNDARIO,
+                    )
+
+        lienzo = cv.Canvas(shapes=lineas, width=ancho, height=alto)
+        arbol = ft.Stack(
+            [*franjas, lienzo, *notas, *ovalos], width=ancho, height=alto
         )
-        for nodo in sorted(origen, key=lambda n: n.orden):
-            por_columna[self._lugar[nodo.estado][0]] = nodo
 
-        total = self._resultado.podados if self._resultado else 0
         encabezado = [
             ft.Row(
                 [
-                    ft.Icon(ft.Icons.STAIRS_OUTLINED, color=AVISO if limite else PRIMARIO, size=20),
+                    ft.Icon(ft.Icons.ACCOUNT_TREE, color=LIMITE_TEXTO if limite else PRIMARIO, size=20),
                     ft.Text(
                         f"Límite: {texto_cambios(limite)}" if limite else "Sin límite de cambios",
                         size=16,
                         weight=ft.FontWeight.BOLD,
-                        color=PRIMARIO,
+                        color=LIMITE_TEXTO if limite else PRIMARIO,
                     ),
                 ],
                 spacing=8,
             ),
             ft.Text(
                 (
-                    f"Cada nivel es un cambio. A* no pasa del nivel {limite}: "
-                    "las ramas más lejanas se cortan sin explorarse."
+                    f"Cada nivel es un cambio de letra. A* no pasa del nivel {limite}."
                     + (
                         f" Límite automático: una palabra de "
-                        f"{len(self._resultado.original)} letras admite {limite}."
-                        if self.automatico and self._resultado
+                        f"{len(resultado.original)} letras admite {limite}."
+                        if self.automatico and resultado
                         else ""
                     )
-                    + (f" Aquí cortó {total:,} combinaciones." if final and total else "")
                 )
                 if limite
-                else "Cada nivel es un cambio. Sin límite, A* puede seguir tan lejos como haga falta.",
+                else "Cada nivel es un cambio de letra. Sin límite, A* sigue tan lejos como haga falta.",
                 size=12,
                 color=TEXTO_SECUNDARIO,
             ),
         ]
 
-        filas: list[ft.Control] = []
-
-        for nivel in range(ultimo + 1):
-            nodo = por_columna.get(nivel)
-            es_limite = limite is not None and nivel == limite
-            sobra = final and columna_meta is not None and nivel > columna_meta
-            sin_meta = final and columna_meta is None and nivel > 0
-
-            if nodo is not None:
-                palabra = nodo.estado
-                es_meta = final and nodo.tipo == "meta"
-                color = EXITO if es_meta else PRIMARIO
-                fondo = ft.Colors.GREEN_50 if es_meta else (PRIMARIO_SUAVE if nodo.tipo != "explorado" else GRIS_FONDO)
-            else:
-                palabra = "—" if (sobra or sin_meta) else "?"
-                color = TEXTO_SECUNDARIO
-                fondo = SUPERFICIE
-                es_meta = False
-
-            nombre = (
-                "Lo que escribiste"
-                if nivel == 0
-                else f"Nivel {nivel}" + (f" de {limite}" if limite else "")
-            )
-            detalle: list[ft.Control] = []
-
-            if nivel > 0 and nodo is not None and nodo.padre:
-                padre = self._nodos.get(nodo.padre)
-                costo = nodo.g - padre.g if padre else nodo.g
-                accion = ACCION_SIMPLE.get(nodo.operacion or "", "un cambio")
-                detalle.append(ft.Text(f"desde «{nodo.padre}»: {accion} (+{costo})", size=11, color=TEXTO_SECUNDARIO))
-
-            if nivel > 0 and nivel in info and info[nivel].expandidos and (nodo is not None or final):
-                dato = info[nivel]
-                texto = (
-                    f"de {dato.expandidos} palabras salieron {dato.generados:,} combinaciones"
-                )
-                if dato.podados:
-                    texto += f"; el límite descartó {dato.podados:,}"
-                detalle.append(ft.Text(texto, size=11, color=AVISO if dato.podados else TEXTO_SECUNDARIO))
-
-            if es_limite:
-                detalle.append(
-                    ft.Text(
-                        "Último nivel: solo se acepta una palabra del diccionario; "
-                        "más allá no se explora.",
-                        size=11,
-                        weight=ft.FontWeight.BOLD,
-                        color=AVISO,
-                    )
-                )
-            elif sobra:
-                detalle.append(ft.Text("No hizo falta llegar aquí.", size=11, color=TEXTO_SECUNDARIO))
-            elif sin_meta and es_limite is False:
-                detalle.append(ft.Text("Sin palabra válida en este nivel.", size=11, color=TEXTO_SECUNDARIO))
-
-            if nivel > 0:
-                filas.append(
-                    ft.Row(
-                        [ft.Icon(ft.Icons.ARROW_DOWNWARD, size=16, color=GRIS_BORDE)],
-                        alignment=ft.MainAxisAlignment.CENTER,
-                    )
-                )
-
-            filas.append(
-                ft.Container(
-                    padding=ft.Padding.symmetric(vertical=8, horizontal=12),
-                    border_radius=10,
-                    bgcolor=ft.Colors.AMBER_50 if es_limite and nodo is None else fondo,
-                    border=ft.Border.all(
-                        2 if es_limite else 1,
-                        ft.Colors.AMBER_700 if es_limite else (EXITO if es_meta else BORDE),
-                    ),
-                    opacity=0.55 if (nodo is None and not es_limite) else 1,
-                    content=ft.Column(
-                        [
-                            ft.Row(
-                                [
-                                    ft.Text(nombre, size=11, weight=ft.FontWeight.BOLD, color=AVISO if es_limite else TEXTO_SECUNDARIO),
-                                    ft.Text(
-                                        palabra,
-                                        size=20,
-                                        weight=ft.FontWeight.BOLD,
-                                        color=color,
-                                        font_family=FUENTE_PALABRA,
-                                        font_family_fallback=FUENTES_RESPALDO,
-                                    ),
-                                ],
-                                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                                vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                            ),
-                            *detalle,
-                        ],
-                        spacing=2,
-                    ),
-                )
-            )
-
-        return [*encabezado, *filas]
+        return [
+            *encabezado,
+            ft.Row([ft.Column([arbol], scroll=ft.ScrollMode.AUTO, height=min(alto, 480))], scroll=ft.ScrollMode.AUTO),
+        ]
 
     def _frase_empate(self, meta: str) -> str:
         if not self._perdedoras or meta not in self._frecuencia:

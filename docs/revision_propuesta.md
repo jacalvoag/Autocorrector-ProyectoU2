@@ -213,11 +213,14 @@ El árbol "Así buscó A*" también refleja el límite y el desempate:
   pasando la escala Zipf a apariciones (`10**zipf`) y repartiendo el 100 %
   entre las palabras mostradas (`probabilidades()` en `diccionario.py`). Con
   límite 2, `nmovte`: `norte` 78 %, `monte` 15 %, `note` 6 %, `mote` 1 %.
-- A la derecha del árbol, el panel "Límite" dibuja los niveles uno bajo
-  otro (lo que escribiste, nivel 1, 2, 3) y la palabra de cada nivel va
-  apareciendo al mismo ritmo que el árbol. Cada nivel indica cuántas
-  combinaciones de letras salieron y cuántas cortó el límite
-  (`Resultado.niveles`); el último nivel se marca en ámbar.
+- A la derecha del árbol, el panel "Límite" dibuja otro árbol de arriba
+  hacia abajo, como los de clase: un nivel por cada cambio, óvalos con la
+  palabra y la letra cambiada resaltada, flechas, una X en las ramas que no
+  llevaron a la meta y una palomita en la meta. Los nodos aparecen al mismo
+  ritmo que el árbol de la izquierda. El último nivel permitido va en rojo
+  suave e indica cuántas combinaciones cortó el límite y cuántas se
+  generaron (`Resultado.niveles`); los niveles que no hizo falta alcanzar
+  lo dicen.
 - `Resultado.podados` cuenta las combinaciones de letras que el límite de
   niveles descartó sin explorar y se muestra en el panel del límite.
 
