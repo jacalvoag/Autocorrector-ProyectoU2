@@ -288,5 +288,71 @@ class TestGrafoInteractivo(unittest.TestCase):
         self.assertEqual(self.grafo._paso, 2)
 
 
+@unittest.skipUnless(HAY_FLET, "Flet no está instalado")
+class TestGrafoConLimiteYEmpate(unittest.TestCase):
+    def setUp(self):
+        from autocorrector.interfaz import GrafoBusqueda
+
+        teclados = cargar_distribuciones()
+        self.traza = []
+        self.resultado = buscar_correccion(
+            "nmovte",
+            teclados["qwerty"],
+            cargar_diccionario(),
+            max_niveles=2,
+            traza=self.traza,
+        )
+        self.grafo = GrafoBusqueda(PaginaFalsa())
+        self.grafo.mostrar(self.resultado, tuple(self.traza), 2)
+
+    def textos(self):
+        import flet as ft
+
+        encontrados = []
+        pila = list(self.grafo.area.controls)
+
+        while pila:
+            actual = pila.pop()
+
+            if isinstance(actual, ft.Text):
+                encontrados.append(str(actual.value))
+
+            pila.extend(getattr(actual, "controls", None) or [])
+            contenido = getattr(actual, "content", None)
+
+            if contenido is not None and not isinstance(contenido, str):
+                pila.append(contenido)
+
+        return encontrados
+
+    def test_las_columnas_muestran_el_nivel_y_el_limite(self):
+        textos = self.textos()
+
+        self.assertIn("Lo que escribiste", textos)
+        self.assertIn("Nivel 1 de 2", textos)
+        self.assertIn("Nivel 2 de 2 · último permitido", textos)
+
+    def test_el_empate_aparece_junto_a_la_meta(self):
+        textos = self.textos()
+
+        self.assertEqual(self.resultado.sugerencia, "norte")
+        self.assertIn("norte", textos)
+        self.assertIn("monte", textos)
+        self.assertIn("perdió por frecuencia", textos)
+        self.assertIn("frecuencia 5.20", textos)
+
+    def test_la_explicacion_de_la_meta_cita_el_desempate(self):
+        self.assertIn("«monte»", self.grafo.explicacion.value)
+        self.assertIn("es más usada", self.grafo.explicacion.value)
+
+    def test_el_contador_menciona_el_limite(self):
+        self.assertIn("límite de 2 cambios", self.grafo.contador.value)
+
+    def test_sin_final_no_se_muestran_los_perdedores(self):
+        self.grafo.ir(1)
+
+        self.assertNotIn("perdió por frecuencia", self.textos())
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -167,6 +167,16 @@ nuevo.
   una palabra a ese costo, el bloque lo dice. Los datos vienen de
   `Resultado.empates`.
 
+El árbol "Así buscó A*" también refleja el límite y el desempate:
+
+- Cada columna tiene un rótulo con su nivel: "Lo que escribiste", "Nivel 1
+  de 3", "Nivel 2 de 3"... y el último nivel permitido va en ámbar.
+- Al llegar al resultado final, la meta muestra su frecuencia y debajo
+  aparecen las palabras que empataron en costo y perdieron ("perdió por
+  frecuencia"), cada una con su frecuencia.
+- La explicación de la meta cita el empate: "Empató en costo con «monte»
+  (4.48), pero «norte» (5.20) es más usada y por eso se eligió."
+
 ## Pendientes
 
 - Revisar juntos la rama `rafael-nucleo-propuesta` antes de pasarla a

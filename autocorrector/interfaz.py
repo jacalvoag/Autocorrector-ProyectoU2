@@ -280,6 +280,8 @@ ANCHO_NODO = 160
 ALTO_NODO = 54
 COLUMNA = 240
 FILA = 64
+ENCABEZADO = 34  # Alto de la fila con «Nivel 1 de 3», «Nivel 2 de 3»...
+MAX_EMPATES_EN_ARBOL = 3
 LIMITE_GRAFO = 7
 GRIS_FONDO = ft.Colors.BLUE_GREY_50
 GRIS_BORDE = ft.Colors.BLUE_GREY_200
@@ -304,6 +306,10 @@ class GrafoBusqueda:
         self._total_expandidos = 0
         self._nodos: dict[str, Nodo] = {}
         self._lugar: dict[str, tuple[int, float]] = {}
+        self._max_niveles: int | None = None
+        self._columnas = 1
+        self._perdedoras: list[tuple[str, float]] = []
+        self._frecuencia: dict[str, float] = {}
         self._pasos: list[Nodo] = []
         self._paso = 0
         self._seleccion: str | None = None
@@ -395,7 +401,12 @@ class GrafoBusqueda:
 
     # Datos
 
-    def mostrar(self, resultado: Resultado, traza: tuple[Expansion, ...]) -> None:
+    def mostrar(
+        self,
+        resultado: Resultado,
+        traza: tuple[Expansion, ...],
+        max_niveles: int | None = None,
+    ) -> None:
         """Carga una búsqueda nueva; si es la misma, conserva el paso actual."""
         if resultado is self._resultado:
             return
@@ -413,11 +424,17 @@ class GrafoBusqueda:
         self._pasos = pasos(self._nodos)
         self._paso = len(self._pasos)
         self._seleccion = None
+        self._max_niveles = max_niveles
+        self._frecuencia = dict(resultado.empates)
+        # Palabras que cuestan lo mismo que la elegida y perdieron por frecuencia.
+        self._perdedoras = list(resultado.empates[1:1 + MAX_EMPATES_EN_ARBOL])
 
         columnas = max(c for c, _ in self._lugar.values()) + 1
         filas = max(f for _, f in self._lugar.values()) + 1
+        self._columnas = columnas
+        filas += len(self._perdedoras)
         ancho = int((columnas - 1) * COLUMNA + ANCHO_NODO + 8)
-        alto = int((filas - 1) * FILA + ALTO_NODO + 8)
+        alto = int(ENCABEZADO + (filas - 1) * FILA + ALTO_NODO + 8)
         self.area.width = ancho
         self.area.height = alto
         self.lienzo.width = ancho
@@ -501,8 +518,8 @@ class GrafoBusqueda:
 
             c1, f1 = self._lugar[nodo.padre]
             c2, f2 = self._lugar[nodo.estado]
-            x1, y1 = c1 * COLUMNA + ANCHO_NODO, f1 * FILA + ALTO_NODO / 2
-            x2, y2 = c2 * COLUMNA, f2 * FILA + ALTO_NODO / 2
+            x1, y1 = c1 * COLUMNA + ANCHO_NODO, ENCABEZADO + f1 * FILA + ALTO_NODO / 2
+            x2, y2 = c2 * COLUMNA, ENCABEZADO + f2 * FILA + ALTO_NODO / 2
             camino = final and nodo.tipo in ("ruta", "meta")
             lineas.append(
                 cv.Line(
@@ -530,14 +547,115 @@ class GrafoBusqueda:
         self.lienzo.shapes = lineas
         tarjetas = [self._tarjeta(n, n.estado == actual.estado, final, n.estado == destacado)
                     for n in visibles]
-        self.area.controls = [self.lienzo, *tarjetas, *etiquetas]
+        extras = self._tarjetas_empate() if final else []
+        self.area.controls = [
+            self.lienzo,
+            *self._encabezados(),
+            *tarjetas,
+            *extras,
+            *etiquetas,
+        ]
 
         self.deslizador.value = paso
+        limite = (
+            "sin límite de cambios"
+            if self._max_niveles is None
+            else f"límite de {texto_cambios(self._max_niveles)}"
+        )
         self.contador.value = (
             f"Paso {paso} de {len(self._pasos)}. A* revisó {self._total_expandidos:,} "
-            "palabras en total; aquí se ven las primeras y el camino final."
+            f"palabras en total ({limite}); aquí se ven las primeras y el camino final."
         )
         self.explicacion.value = self._explicar(self._nodos[destacado], final)
+
+    def _frase_empate(self, meta: str) -> str:
+        if not self._perdedoras or meta not in self._frecuencia:
+            return ""
+
+        otras = ", ".join(
+            f"«{p}» ({f:.2f})" for p, f in self._perdedoras
+        )
+        return (
+            f" Empató en costo con {otras}, pero «{meta}» "
+            f"({self._frecuencia[meta]:.2f}) es más usada y por eso se eligió."
+        )
+
+    def _encabezados(self) -> list[ft.Control]:
+        """Rótulo de cada columna: el nivel (cantidad de cambios) y el límite."""
+        limite = self._max_niveles
+        rotulos: list[ft.Control] = []
+
+        for nivel in range(self._columnas):
+            if nivel == 0:
+                texto, ultimo = "Lo que escribiste", False
+            else:
+                ultimo = limite is not None and nivel == limite
+                texto = f"Nivel {nivel}" + (f" de {limite}" if limite else "")
+                texto += " · último permitido" if ultimo else ""
+
+            rotulos.append(
+                ft.Container(
+                    left=nivel * COLUMNA,
+                    top=0,
+                    width=ANCHO_NODO,
+                    height=ENCABEZADO - 8,
+                    alignment=ft.Alignment.CENTER,
+                    border_radius=6,
+                    bgcolor=ft.Colors.AMBER_50 if ultimo else PRIMARIO_SUAVE,
+                    border=ft.Border.all(1, ft.Colors.AMBER_700 if ultimo else BORDE),
+                    content=ft.Text(
+                        texto,
+                        size=11,
+                        weight=ft.FontWeight.BOLD,
+                        color=AVISO if ultimo else PRIMARIO,
+                    ),
+                )
+            )
+
+        return rotulos
+
+    def _tarjetas_empate(self) -> list[ft.Control]:
+        """Palabras que empataron en costo con la meta y perdieron por frecuencia."""
+        meta = next((n for n in self._nodos.values() if n.tipo == "meta"), None)
+
+        if meta is None or not self._perdedoras:
+            return []
+
+        columna, fila_meta = self._lugar[meta.estado]
+        base = max(f for _, f in self._lugar.values()) + 1
+        tarjetas: list[ft.Control] = []
+
+        for i, (palabra, frecuencia) in enumerate(self._perdedoras):
+            tarjetas.append(
+                ft.Container(
+                    left=columna * COLUMNA,
+                    top=ENCABEZADO + (base + i) * FILA,
+                    width=ANCHO_NODO,
+                    height=ALTO_NODO,
+                    border_radius=12,
+                    bgcolor=GRIS_FONDO,
+                    border=ft.Border.all(2, GRIS_BORDE),
+                    alignment=ft.Alignment.CENTER,
+                    tooltip=f"Costo igual que «{meta.estado}», pero se usa menos",
+                    data=f"empate:{palabra}",
+                    content=ft.Column(
+                        [
+                            ft.Text(palabra, size=17, weight=ft.FontWeight.BOLD, color=TEXTO_SECUNDARIO),
+                            ft.Text(
+                                f"empate de costo {meta.g} · frecuencia {frecuencia:.2f}",
+                                size=11,
+                                color=TEXTO_SECUNDARIO,
+                            ),
+                            ft.Text("perdió por frecuencia", size=11, color=AVISO, weight=ft.FontWeight.BOLD),
+                        ],
+                        spacing=0,
+                        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                        alignment=ft.MainAxisAlignment.CENTER,
+                    ),
+                )
+            )
+
+        return tarjetas
 
     def _tarjeta(self, nodo: Nodo, es_actual: bool, final: bool, destacado: bool) -> ft.Container:
         if final and nodo.tipo == "meta":
@@ -554,7 +672,7 @@ class GrafoBusqueda:
         columna, fila = self._lugar[nodo.estado]
         return ft.Container(
             left=columna * COLUMNA,
-            top=fila * FILA,
+            top=ENCABEZADO + fila * FILA,
             width=ANCHO_NODO,
             height=ALTO_NODO,
             border_radius=12,
@@ -569,6 +687,18 @@ class GrafoBusqueda:
                     ft.Text(nodo.estado, size=17, weight=ft.FontWeight.BOLD,
                             font_family=FUENTE_PALABRA, font_family_fallback=FUENTES_RESPALDO),
                     ft.Text(f"g {nodo.g} + h {nodo.h} = f {nodo.f}", size=11, color=TEXTO_SECUNDARIO),
+                    *(
+                        [
+                            ft.Text(
+                                f"frecuencia {self._frecuencia[nodo.estado]:.2f}",
+                                size=11,
+                                color=EXITO,
+                                weight=ft.FontWeight.BOLD,
+                            )
+                        ]
+                        if final and nodo.tipo == "meta" and nodo.estado in self._frecuencia
+                        else []
+                    ),
                 ],
                 spacing=0,
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -592,7 +722,7 @@ class GrafoBusqueda:
                 f"«{nodo.estado}» es una palabra válida. Se llega desde «{nodo.padre}» al "
                 f"{accion} (+{costo}). Costo total: {nodo.g}. No quedaba ninguna opción "
                 "con f menor, así que es la corrección más barata."
-            )
+            ) + self._frase_empate(nodo.estado)
 
         texto = (
             f"Paso {nodo.orden}: A* revisa «{nodo.estado}». Viene de «{nodo.padre}» al "
@@ -1263,7 +1393,7 @@ class Aplicacion:
             self.boton_rechazar.content = "Conservar original"
 
         self.metricas.controls = [costo, expandidos, frontera, duracion]
-        self.grafo.mostrar(resultado, vista.traza)
+        self.grafo.mostrar(resultado, vista.traza, vista.max_niveles)
 
 
 def main(page: ft.Page) -> None:
