@@ -18,6 +18,8 @@ from autocorrector.teclados import ALFABETO, Distribucion, generar_aleatoria
 # Elegido midiendo palabras con uno y dos errores al azar en los tres
 # teclados y uno aleatorio. Detalle en docs/revision_propuesta.md.
 MAX_ESTADOS = 200_000
+# Valores que ofrece el selector de la interfaz; None quita el límite.
+OPCIONES_NIVELES: tuple[int | None, ...] = (1, 2, 3, 4, 5, None)
 # Operaciones máximas de una corrección. Con más cambios la palabra
 # sugerida ya se parece poco a lo escrito, sobre todo en palabras cortas.
 MAX_NIVELES = 3
@@ -249,6 +251,33 @@ class Controlador:
             )
         else:
             self._avisar(f"Teclado activo: {self._teclado.nombre}.", "info")
+
+    # Límite de cambios
+
+    def cambiar_max_niveles(self, valor: int | None) -> None:
+        """Cambia cuántas operaciones puede tener una corrección."""
+        if valor is not None and valor < 1:
+            raise ValueError("El límite de cambios debe ser positivo.")
+
+        with self._candado:
+            if valor == self._max_niveles:
+                return
+
+            self._max_niveles = valor
+            texto = (
+                "sin límite" if valor is None else f"{texto_cambios(valor)} como máximo"
+            )
+
+            if self._descartar_pendiente():
+                self._avisar(
+                    f"El límite cambió a {texto}. Se descartó la revisión "
+                    "anterior; presiona espacio para buscar de nuevo.",
+                    "info",
+                )
+            else:
+                self._avisar(f"Límite de cambios: {texto}.", "info")
+
+        self._notificar()
 
     # Entrada
 

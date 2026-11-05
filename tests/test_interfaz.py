@@ -203,6 +203,21 @@ class TestControlador(unittest.TestCase):
         self.assertEqual(MAX_NIVELES, 3)
         self.assertEqual(self.controlador.vista().max_niveles, MAX_NIVELES)
 
+    def test_cambiar_el_limite_descarta_la_sugerencia_pendiente(self):
+        self.assertEqual(self.escribir("nmovte ").fase, "sugerida")
+
+        self.controlador.cambiar_max_niveles(2)
+        vista = self.controlador.vista()
+
+        self.assertEqual(vista.fase, "escribiendo")
+        self.assertEqual(vista.max_niveles, 2)
+
+        vista = self.escribir("nmovte ")
+        self.assertEqual(vista.resultado.sugerencia, "norte")
+
+        with self.assertRaises(ValueError):
+            self.controlador.cambiar_max_niveles(0)
+
     def test_sin_correccion_cercana_conserva_la_entrada(self):
         vista = self.escribir("xyzxyz ")
 
@@ -453,6 +468,38 @@ class TestVistaFlet(unittest.TestCase):
         self.assertFalse(self.app.titulo_ruta.visible)
         self.assertEqual(self.app.ruta.controls, [])
         self.assertIn("3 cambios o menos", self.app.nota_resultado.value)
+
+    def test_selector_de_limite_cambia_la_busqueda(self):
+        self.assertEqual(self.app.selector_niveles.value, "3")
+
+        self.app.selector_niveles.value = "2"
+        self.app._al_elegir_niveles(
+            type("E", (), {"control": self.app.selector_niveles})()
+        )
+        self.app.controlador.actualizar_entrada("nmovte ")
+
+        self.assertEqual(self.app.selector_niveles.value, "2")
+        self.assertIn("norte", self.app.titulo_resultado.value)
+        self.assertIn("2 cambios", self.app.nota_resultado.value)
+
+        self.app.controlador.cambiar_max_niveles(None)
+        self.assertEqual(self.app.selector_niveles.value, "sin")
+
+    def test_muestra_los_empates_con_su_frecuencia(self):
+        self.app.controlador.cambiar_max_niveles(2)
+        self.app.controlador.actualizar_entrada("nmovte ")
+
+        self.assertTrue(self.app.titulo_empates.visible)
+        palabras = [ficha.content.controls[0].value for ficha in self.app.empates.controls]
+        self.assertEqual(palabras[0], "norte")
+        self.assertIn("monte", palabras)
+        self.assertIn("elegida", self.app.empates.controls[0].content.controls[1].value)
+
+    def test_sin_empate_no_muestra_el_bloque(self):
+        self.app.controlador.actualizar_entrada("gstp ")
+
+        self.assertFalse(self.app.titulo_empates.visible)
+        self.assertEqual(self.app.empates.controls, [])
 
     def test_senalar_tecla_resalta_vecinas(self):
         self.app._al_senalar("g", True)

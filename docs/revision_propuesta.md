@@ -149,6 +149,17 @@ de 4 a 6 letras con una tecla vecina equivocada (QWERTY, límite de 3), la
 sugerencia acertó 236 veces con el diccionario anterior y 274 con el
 nuevo.
 
+## Lo que se ve en la ventana
+
+- Selector "Límite de cambios" (1 a 5 o sin límite), debajo del campo de
+  palabra. Cambiarlo descarta la revisión pendiente; al volver a escribir
+  la palabra, la búsqueda usa el límite nuevo. Con 3, `nmovte` da `nombre`;
+  con 2, `norte`; con 1, "sin corrección cercana".
+- Cuando varias palabras cuestan lo mismo, el panel de resultado las lista
+  con su frecuencia y marca la elegida (`Resultado.empates`). Ejemplo:
+  `nmovte` con límite 2 muestra `norte` (5.20, elegida) y `monte` (4.48).
+  Si solo hay una palabra a ese costo, el bloque no aparece.
+
 ## Pendientes
 
 - Revisar juntos la rama `rafael-nucleo-propuesta` antes de pasarla a

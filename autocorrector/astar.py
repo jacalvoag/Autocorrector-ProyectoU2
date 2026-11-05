@@ -40,6 +40,9 @@ class Resultado:
     ruta: tuple[Paso, ...]
     expandidos: int
     frontera_maxima: int
+    # Palabras del diccionario alcanzables con el costo mínimo, de la
+    # preferida a la menos preferida, con su frecuencia (0 si no hay).
+    empates: tuple[tuple[str, float], ...] = ()
 
 
 def _validar_entrada(palabra: str) -> None:
@@ -281,6 +284,7 @@ def buscar_correccion(
     vigentes: dict[str, list[tuple[int, int]]] = {palabra: [(0, 0)]}
 
     mejor_meta: str | None = None
+    empatadas: set[str] = set()
     nivel_meta = 0
     costo_meta: int | None = None
     expandidos = 0
@@ -296,6 +300,11 @@ def buscar_correccion(
             break  # Ya no puede aparecer otra meta de ese costo.
 
         if estado in diccionario:
+            if costo_meta is None or g < costo_meta:
+                empatadas = {estado}
+            elif g == costo_meta:
+                empatadas.add(estado)
+
             if (
                 costo_meta is None
                 or g < costo_meta
@@ -413,4 +422,8 @@ def buscar_correccion(
         _reconstruir(mejor_meta, nivel_meta, anteriores, sube),
         expandidos,
         frontera_maxima,
+        tuple(
+            (meta, frecuencias.get(meta, 0))
+            for meta in sorted(empatadas, key=preferencia)
+        ),
     )

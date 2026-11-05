@@ -125,6 +125,30 @@ class TestAStar(unittest.TestCase):
         self.assertEqual(resultado.sugerencia, "gato")
         self.assertEqual(resultado.costo, 1)
 
+    def test_resultado_lista_los_empates_en_orden_de_preferencia(self):
+        vocabulario = Diccionario(
+            {"gato", "gatl", "tatp"}, {"gato": 5.2, "gatl": 1.1, "tatp": 3.0}
+        )
+
+        resultado = buscar_correccion(
+            "gatp", self.teclados["qwerty"], vocabulario
+        )
+
+        self.assertEqual(
+            resultado.empates,
+            (("gato", 5.2), ("tatp", 3.0), ("gatl", 1.1)),
+        )
+        self.assertEqual(resultado.empates[0][0], resultado.sugerencia)
+
+    def test_empates_solo_incluye_el_costo_minimo(self):
+        vocabulario = Diccionario({"gatl", "gatos"}, {"gatl": 0.5, "gatos": 6.0})
+
+        resultado = buscar_correccion(
+            "gatp", self.teclados["qwerty"], vocabulario
+        )
+
+        self.assertEqual(resultado.empates, (("gatl", 0.5),))
+
     def test_frecuencia_no_supera_al_costo(self):
         # gatl cuesta menos aunque se use poquísimo: el costo manda.
         vocabulario = Diccionario(

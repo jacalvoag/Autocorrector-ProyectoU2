@@ -19,6 +19,7 @@ from autocorrector.arbol import Nodo, pasos, posiciones, seleccionar_nodos
 from autocorrector.astar import Expansion, Paso, Resultado
 from autocorrector.controlador import (
     CLAVE_ALEATORIA,
+    OPCIONES_NIVELES,
     Controlador,
     Vista,
     posiciones_cambiadas,
@@ -217,6 +218,33 @@ def ficha_palabra(palabra: str) -> ft.Container:
         border=ft.Border.all(1, BORDE),
         content=ft.Text(palabra, size=15, color=PRIMARIO, weight=ft.FontWeight.W_500),
         data=palabra,
+    )
+
+
+def ficha_empate(palabra: str, frecuencia: float, elegida: bool) -> ft.Container:
+    """Una palabra que cuesta lo mismo que la sugerida, con su frecuencia."""
+    return ft.Container(
+        padding=ft.Padding.symmetric(vertical=6, horizontal=12),
+        border_radius=10,
+        bgcolor=ft.Colors.GREEN_50 if elegida else GRIS_FONDO,
+        border=ft.Border.all(1, EXITO if elegida else GRIS_BORDE),
+        content=ft.Column(
+            [
+                ft.Text(
+                    palabra,
+                    size=15,
+                    weight=ft.FontWeight.BOLD if elegida else ft.FontWeight.W_500,
+                    color=EXITO if elegida else PRIMARIO,
+                ),
+                ft.Text(
+                    f"frecuencia {frecuencia:.2f}" + ("  ·  elegida" if elegida else ""),
+                    size=11,
+                    color=TEXTO_SECUNDARIO,
+                ),
+            ],
+            spacing=0,
+            tight=True,
+        ),
     )
 
 
@@ -727,6 +755,19 @@ class Aplicacion:
             border_radius=10,
             on_change=lambda e: self.controlador.actualizar_entrada(e.control.value),
         )
+        self.selector_niveles = ft.Dropdown(
+            label="Límite de cambios",
+            width=200,
+            dense=True,
+            options=[
+                ft.DropdownOption(
+                    key="sin" if valor is None else str(valor),
+                    text="Sin límite" if valor is None else texto_cambios(valor),
+                )
+                for valor in OPCIONES_NIVELES
+            ],
+            on_select=self._al_elegir_niveles,
+        )
         self.progreso = ft.ProgressBar(color=PRIMARIO, bgcolor=PRIMARIO_SUAVE)
         self.icono_aviso = ft.Icon(ft.Icons.INFO_OUTLINE, size=20)
         self.aviso = ft.Text(size=14, selectable=True, expand=True)
@@ -752,6 +793,7 @@ class Aplicacion:
         return tarjeta(
             titulo_seccion(ft.Icons.EDIT_NOTE, "Palabra"),
             self.campo,
+            self.selector_niveles,
             self.progreso,
             self.caja_aviso,
             ft.Divider(height=1, color=BORDE),
@@ -781,6 +823,10 @@ class Aplicacion:
             color=TEXTO_SECUNDARIO,
         )
         self.nota_resultado = ft.Text(size=13, color=TEXTO_SECUNDARIO)
+        self.titulo_empates = ft.Text(
+            size=13, weight=ft.FontWeight.BOLD, color=TEXTO_SECUNDARIO
+        )
+        self.empates = ft.Row(wrap=True, spacing=8, run_spacing=8)
         self.grafo = GrafoBusqueda(self.page)
         self.boton_aceptar = ft.FilledButton(
             content="Aceptar",
@@ -808,6 +854,8 @@ class Aplicacion:
             self.titulo_ruta,
             self.ruta,
             self.nota_resultado,
+            self.titulo_empates,
+            self.empates,
             self.grafo.contenedor,
             ft.Row([self.boton_aceptar, self.boton_rechazar], spacing=10),
         )
@@ -839,6 +887,11 @@ class Aplicacion:
             self._al_generar(e)
         else:
             self._tecla(lambda: self.controlador.seleccionar_teclado(clave))
+
+    def _al_elegir_niveles(self, e: ft.Event) -> None:
+        clave = e.control.value
+        valor = None if clave == "sin" else int(clave)
+        self._tecla(lambda: self.controlador.cambiar_max_niveles(valor))
 
     def _al_generar(self, e: ft.Event | None) -> None:
         self._tecla(self.controlador.generar_aleatorio)
@@ -884,6 +937,9 @@ class Aplicacion:
         vista = self.controlador.vista()
 
         self.selector.value = vista.clave_teclado
+        self.selector_niveles.value = (
+            "sin" if vista.max_niveles is None else str(vista.max_niveles)
+        )
         self.etiqueta_teclado.value = vista.teclado.nombre
         if vista.semilla is not None:
             # La semilla se muestra para poder repetir la distribución,
@@ -955,6 +1011,23 @@ class Aplicacion:
         self.teclado.width = ancho * PASO
         self.teclado.height = alto * PASO
 
+    def _dibujar_empates(self, resultado: Resultado) -> None:
+        """Muestra por qué se eligió esta palabra cuando hay varias iguales."""
+        candidatas = resultado.empates[:6]
+
+        if len(candidatas) < 2:
+            return
+
+        self.titulo_empates.visible = True
+        self.titulo_empates.value = (
+            f"{len(resultado.empates)} palabras cuestan lo mismo "
+            f"({resultado.costo}). Se elige la más usada."
+        )
+        self.empates.controls = [
+            ficha_empate(palabra, frecuencia, palabra == resultado.sugerencia)
+            for palabra, frecuencia in candidatas
+        ]
+
     def _dibujar_resultado(self, vista: Vista) -> None:
         resultado = vista.resultado
         visible = (
@@ -980,6 +1053,14 @@ class Aplicacion:
         )
         duracion = metrica("Tiempo", tiempo, "Tiempo de la búsqueda en este equipo.")
 
+        limite = (
+            "sin límite"
+            if vista.max_niveles is None
+            else texto_cambios(vista.max_niveles)
+        )
+        self.titulo_empates.visible = False
+        self.empates.controls = []
+
         if vista.fase == "sugerida":
             self.titulo_resultado.value = f"{resultado.original}  ->  {resultado.sugerencia}"
             self.etiqueta_estado.value = "Corrección de costo mínimo"
@@ -992,7 +1073,11 @@ class Aplicacion:
             )
             self.titulo_ruta.visible = True
             self.ruta.controls = cadena_de_ruta(resultado.ruta)
-            self.nota_resultado.value = f"Teclado usado: {vista.teclado.nombre}."
+            self.nota_resultado.value = (
+                f"Teclado usado: {vista.teclado.nombre}. "
+                f"Límite de cambios: {limite}."
+            )
+            self._dibujar_empates(resultado)
             self.boton_aceptar.visible = True
             self.boton_rechazar.content = "Rechazar"
         elif vista.fase == "sin_correccion":
