@@ -5,6 +5,7 @@ from autocorrector.astar import buscar_correccion
 from autocorrector.astar import Paso
 from autocorrector.controlador import (
     CLAVE_ALEATORIA,
+    MAX_NIVELES,
     Controlador,
     letras_sustituidas,
     posiciones_cambiadas,
@@ -197,6 +198,42 @@ class TestControlador(unittest.TestCase):
             vista.teclado.posiciones,
             generar_aleatoria(self.teclados["qwerty"], vista.semilla).posiciones,
         )
+
+    def test_limite_de_niveles_predeterminado(self):
+        self.assertEqual(MAX_NIVELES, 3)
+        self.assertEqual(self.controlador.vista().max_niveles, MAX_NIVELES)
+
+    def test_sin_correccion_cercana_conserva_la_entrada(self):
+        vista = self.escribir("xyzxyz ")
+
+        self.assertEqual(vista.fase, "sin_correccion")
+        self.assertEqual(vista.resultado.estado, "sin_correccion")
+        self.assertIsNone(vista.resultado.sugerencia)
+        self.assertIn("3 cambios o menos", vista.aviso)
+
+        self.controlador.aceptar()
+        self.assertEqual(self.controlador.vista().texto, ())
+
+        self.controlador.rechazar()
+        vista = self.controlador.vista()
+        self.assertEqual(vista.texto, ("xyzxyz",))
+        self.assertEqual(vista.fase, "escribiendo")
+
+    def test_aviso_en_singular_con_un_nivel(self):
+        controlador = Controlador(
+            self.teclados, self.diccionario, self.ejecutor, max_niveles=1
+        )
+        controlador.actualizar_entrada("xyzxyz ")
+        self.ejecutor.correr_todas()
+
+        self.assertIn("1 cambio o menos", controlador.vista().aviso)
+
+    def test_corrige_dentro_del_limite(self):
+        vista = self.escribir("nmovte ")
+
+        self.assertEqual(vista.fase, "sugerida")
+        self.assertEqual(vista.resultado.sugerencia, "nombre")
+        self.assertLessEqual(len(vista.resultado.ruta), MAX_NIVELES)
 
     def test_resultado_incompleto_no_tiene_costo(self):
         controlador = Controlador(
@@ -405,6 +442,17 @@ class TestVistaFlet(unittest.TestCase):
         self.assertFalse(self.app.boton_aceptar.visible)
         self.assertFalse(self.app.titulo_ruta.visible)
         self.assertEqual(self.app.ruta.controls, [])
+
+    def test_sin_correccion_oculta_ruta_y_aceptar(self):
+        self.app.controlador.actualizar_entrada("xyzxyz ")
+
+        self.assertEqual(self.app.controlador.vista().fase, "sin_correccion")
+        self.assertTrue(self.app.panel_resultado.visible)
+        self.assertEqual(self.app.etiqueta_estado.value, "Sin corrección cercana")
+        self.assertFalse(self.app.boton_aceptar.visible)
+        self.assertFalse(self.app.titulo_ruta.visible)
+        self.assertEqual(self.app.ruta.controls, [])
+        self.assertIn("3 cambios o menos", self.app.nota_resultado.value)
 
     def test_senalar_tecla_resalta_vecinas(self):
         self.app._al_senalar("g", True)

@@ -18,10 +18,15 @@ from autocorrector.teclados import ALFABETO, Distribucion, generar_aleatoria
 # Elegido midiendo palabras con uno y dos errores al azar en los tres
 # teclados y uno aleatorio. Detalle en docs/revision_propuesta.md.
 MAX_ESTADOS = 200_000
+# Operaciones máximas de una corrección. Con más cambios la palabra
+# sugerida ya se parece poco a lo escrito, sobre todo en palabras cortas.
+MAX_NIVELES = 3
 CLAVE_ALEATORIA = "aleatoria"
 TECLADO_BASE_ALEATORIO = "qwerty"
 
-Fase = Literal["escribiendo", "buscando", "sugerida", "incompleta"]
+Fase = Literal[
+    "escribiendo", "buscando", "sugerida", "incompleta", "sin_correccion"
+]
 TipoAviso = Literal["info", "ok", "error"]
 
 
@@ -50,6 +55,12 @@ class Vista:
     texto: tuple[str, ...]
     teclas_resaltadas: frozenset[str]
     traza: tuple[Expansion, ...] = ()
+    max_niveles: int | None = None
+
+
+def texto_cambios(cantidad: int | None) -> str:
+    """«1 cambio» o «3 cambios», para los avisos del límite de niveles."""
+    return f"{cantidad} cambio" if cantidad == 1 else f"{cantidad} cambios"
 
 
 def validar_palabra(palabra: str) -> str | None:
@@ -131,6 +142,7 @@ class Controlador:
         al_cambiar: Callable[[], None] = lambda: None,
         *,
         max_estados: int | None = MAX_ESTADOS,
+        max_niveles: int | None = MAX_NIVELES,
         buscar: Callable[..., Resultado] = buscar_correccion,
     ) -> None:
         if not teclados:
@@ -146,6 +158,7 @@ class Controlador:
         self._ejecutar = ejecutar
         self._al_cambiar = al_cambiar
         self._max_estados = max_estados
+        self._max_niveles = max_niveles
         self._buscar = buscar
         self._candado = threading.RLock()
 
@@ -186,6 +199,7 @@ class Controlador:
                 texto=tuple(self._texto),
                 teclas_resaltadas=letras_sustituidas(self._resultado),
                 traza=self._traza,
+                max_niveles=self._max_niveles,
             )
 
     # Teclados
@@ -317,6 +331,7 @@ class Controlador:
                 busqueda.teclado,
                 self.diccionario,
                 max_estados=self._max_estados,
+                max_niveles=self._max_niveles,
                 traza=traza,
             )
             error = None
@@ -366,6 +381,14 @@ class Controlador:
                     "corrección con optimalidad garantizada.",
                     "error",
                 )
+            elif resultado.estado == "sin_correccion":
+                self._fase = "sin_correccion"
+                self._resultado = resultado
+                self._avisar(
+                    f"No encontré una corrección cercana para «{busqueda.palabra}»: "
+                    f"ninguna palabra queda a {texto_cambios(self._max_niveles)} o menos.",
+                    "info",
+                )
             elif resultado.estado == "valida":
                 self._fase = "escribiendo"
                 self._resultado = None
@@ -401,7 +424,10 @@ class Controlador:
 
     def rechazar(self) -> None:
         with self._candado:
-            if self._fase not in ("sugerida", "incompleta") or self._resultado is None:
+            if (
+                self._fase not in ("sugerida", "incompleta", "sin_correccion")
+                or self._resultado is None
+            ):
                 return
 
             original = self._resultado.original
