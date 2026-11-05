@@ -330,7 +330,7 @@ class TestGrafoConLimiteYEmpate(unittest.TestCase):
 
         self.assertIn("Lo que escribiste", textos)
         self.assertIn("Nivel 1 de 2", textos)
-        self.assertIn("Nivel 2 de 2 · último permitido", textos)
+        self.assertIn("Nivel 2 de 2 · límite", textos)
 
     def test_el_empate_aparece_junto_a_la_meta(self):
         textos = self.textos()

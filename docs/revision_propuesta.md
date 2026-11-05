@@ -180,16 +180,10 @@ afirmar un óptimo.
 
 ## Lo que se ve en la ventana
 
-- Selector "Límite de cambios" (1 a 5 o sin límite) junto al de teclado.
+- Selector "Límite de cambios" (automático, 1 a 5 o sin límite) junto al de
+  teclado.
   Cambiarlo descarta la revisión pendiente; al volver a escribir la palabra,
   la búsqueda usa el límite nuevo.
-- Indicador de cambios usados: "Cambios usados: 3 de 3 permitidos" con un
-  cuadro por cambio (lleno si se usó, vacío si no). Si no hay corrección
-  dentro del límite, los cuadros salen en rojo con una X.
-- Botón "Comparar con búsqueda sin límite": repite la búsqueda sin límite y
-  muestra, una junto a la otra, los estados expandidos, la frontera máxima
-  y la sugerencia de cada una (`nmovte`: 449 y 10,448 con límite de 3 contra
-  460 y 43,898 sin límite).
 - Bloque "Desempate por frecuencia": lista las palabras que cuestan lo mismo
   con una barra proporcional a su frecuencia y marca la elegida. `nmovte`
   con límite 2 muestra `norte` (5.20, elegida) y `monte` (4.48). Si solo hay
@@ -217,8 +211,8 @@ El árbol "Así buscó A*" también refleja el límite y el desempate:
   hacia abajo, como los de clase: un nivel por cada cambio, óvalos con la
   palabra y la letra cambiada resaltada, flechas, una X en las ramas que no
   llevaron a la meta y una palomita en la meta. Los nodos aparecen al mismo
-  ritmo que el árbol de la izquierda. El último nivel permitido va en rojo
-  suave e indica cuántas combinaciones cortó el límite y cuántas se
+  ritmo que el árbol de la izquierda. El último nivel permitido va en morado
+  claro e indica cuántas combinaciones cortó el límite y cuántas se
   generaron (`Resultado.niveles`); los niveles que no hizo falta alcanzar
   lo dicen.
 - `Resultado.podados` cuenta las combinaciones de letras que el límite de

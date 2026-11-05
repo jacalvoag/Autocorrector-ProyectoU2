@@ -263,14 +263,15 @@ ANCHO_NODO = 160
 ALTO_NODO = 66
 COLUMNA = 240
 FILA = 78
-OVALO_ANCHO = 104
 OVALO_ALTO = 40
 SEPARACION_X = 116
-SEPARACION_Y = 96
-ETIQUETA_NIVEL = 88
-LIMITE_FONDO = ft.Colors.RED_50
-LIMITE_BORDE = ft.Colors.RED_200
-LIMITE_TEXTO = ft.Colors.RED_700
+SEPARACION_X_MIN = 84
+SEPARACION_Y = 82
+ETIQUETA_NIVEL = 70
+ANCHO_PANEL = 700  # Ancho aproximado de la mitad derecha de la ventana.
+LIMITE_FONDO = ft.Colors.DEEP_PURPLE_50
+LIMITE_BORDE = ft.Colors.DEEP_PURPLE_200
+LIMITE_TEXTO = ft.Colors.DEEP_PURPLE_900
 ENCABEZADO = 34  # Alto de la fila con «Nivel 1 de 3», «Nivel 2 de 3»...
 MAX_EMPATES_EN_ARBOL = 4  # Con la elegida son las 5 más frecuentes.
 MAX_EMPATES_EN_PANEL = 5
@@ -350,7 +351,6 @@ class GrafoBusqueda:
         self.desplazable = ft.Column([self.area], scroll=ft.ScrollMode.AUTO, height=520)
         # Panel de la derecha: cómo avanzan los niveles hasta el límite.
         self.lateral = ft.Column(spacing=6)
-        self.extra = ft.Column(spacing=8)
 
         self.contenedor = ft.Container(
             padding=16,
@@ -396,7 +396,7 @@ class GrafoBusqueda:
                                 col={"xs": 12, "lg": 6},
                             ),
                             ft.Container(
-                                ft.Column([self.lateral, self.extra], spacing=10),
+                                ft.Column([self.lateral], spacing=10),
                                 col={"xs": 12, "lg": 6},
                             ),
                         ],
@@ -454,7 +454,7 @@ class GrafoBusqueda:
         self.area.height = alto
         self.lienzo.width = ancho
         self.lienzo.height = alto
-        self.desplazable.height = min(alto, 520)
+        self.desplazable.height = min(alto, 720)
         self.deslizador.max = max(2, len(self._pasos))
         self.deslizador.divisions = max(1, len(self._pasos) - 1)
         self._dibujar()
@@ -604,12 +604,19 @@ class GrafoBusqueda:
         actual = visibles[-1].estado if visibles else None
 
         anchura = max(f for _, f in self._lugar.values()) + 1
-        ancho = int(ETIQUETA_NIVEL + 16 + anchura * SEPARACION_X)
+        # Las palabras de un nivel caben en el ancho de la columna si se
+        # puede; si no, el árbol se desplaza hacia los lados.
+        separacion = max(
+            SEPARACION_X_MIN,
+            min(SEPARACION_X, (ANCHO_PANEL - ETIQUETA_NIVEL - 16) / anchura),
+        )
+        ovalo_ancho = separacion - 12
+        ancho = int(ETIQUETA_NIVEL + 16 + anchura * separacion)
         alto = int((ultimo + 1) * SEPARACION_Y + 4)
 
         def centro(estado: str) -> tuple[float, float]:
             nivel, fila = self._lugar[estado]
-            x = ETIQUETA_NIVEL + 8 + (fila + 0.5) * SEPARACION_X
+            x = ETIQUETA_NIVEL + 8 + (fila + 0.5) * separacion
             return x, nivel * SEPARACION_Y + 8 + OVALO_ALTO / 2
 
         franjas: list[ft.Control] = []
@@ -618,7 +625,7 @@ class GrafoBusqueda:
             nombre = (
                 "Escribiste"
                 if nivel == 0
-                else f"Nivel {nivel}" + (" · límite" if es_limite else "")
+                else f"Nivel {nivel}" + ("\nlímite" if es_limite else "")
             )
             franjas.append(
                 ft.Container(
@@ -692,9 +699,9 @@ class GrafoBusqueda:
 
             ovalos.append(
                 ft.Container(
-                    left=x - OVALO_ANCHO / 2,
+                    left=x - ovalo_ancho / 2,
                     top=y - OVALO_ALTO / 2,
-                    width=OVALO_ANCHO,
+                    width=ovalo_ancho,
                     height=OVALO_ALTO,
                     border_radius=OVALO_ALTO / 2,
                     bgcolor=fondo,
@@ -722,7 +729,7 @@ class GrafoBusqueda:
             if insignia is not None:
                 ovalos.append(
                     ft.Container(
-                        left=x + OVALO_ANCHO / 2 - 14,
+                        left=x + ovalo_ancho / 2 - 14,
                         top=y - OVALO_ALTO / 2 - 9,
                         content=insignia,
                     )
@@ -840,7 +847,7 @@ class GrafoBusqueda:
             else:
                 ultimo = limite is not None and nivel == limite
                 texto = f"Nivel {nivel}" + (f" de {limite}" if limite else "")
-                texto += " · último permitido" if ultimo else ""
+                texto += " · límite" if ultimo else ""
 
             rotulos.append(
                 ft.Container(
@@ -850,13 +857,14 @@ class GrafoBusqueda:
                     height=ENCABEZADO - 8,
                     alignment=ft.Alignment.CENTER,
                     border_radius=6,
-                    bgcolor=ft.Colors.AMBER_50 if ultimo else PRIMARIO_SUAVE,
-                    border=ft.Border.all(1, ft.Colors.AMBER_700 if ultimo else BORDE),
+                    bgcolor=LIMITE_FONDO if ultimo else PRIMARIO_SUAVE,
+                    border=ft.Border.all(1, LIMITE_BORDE if ultimo else BORDE),
                     content=ft.Text(
                         texto,
                         size=11,
                         weight=ft.FontWeight.BOLD,
-                        color=AVISO if ultimo else PRIMARIO,
+                        color=LIMITE_TEXTO if ultimo else PRIMARIO,
+                        no_wrap=True,
                     ),
                 )
             )
@@ -1231,13 +1239,7 @@ class Aplicacion:
         )
         self.nota_resultado = ft.Text(size=13, color=TEXTO_SECUNDARIO)
         self.bloque_empates = ft.Column(spacing=8)
-        self.boton_comparar = ft.OutlinedButton(
-            content="Comparar con búsqueda sin límite",
-            icon=ft.Icons.COMPARE_ARROWS,
-            on_click=lambda e: self._tecla(self.controlador.comparar_sin_limite),
-        )
         self.grafo = GrafoBusqueda(self.page)
-        self.bloque_limite = self.grafo.extra
         self.boton_aceptar = ft.FilledButton(
             content="Aceptar",
             icon=ft.Icons.CHECK,
@@ -1428,59 +1430,6 @@ class Aplicacion:
         self.teclado.width = ancho * PASO
         self.teclado.height = alto * PASO
 
-    def _dibujar_limite(self, vista: Vista, resultado: Resultado) -> None:
-        """Botón y tabla para comparar con la búsqueda sin límite.
-
-        Lo visual del límite (niveles, ramificación y poda) lo dibuja el
-        panel lateral del grafo.
-        """
-        if vista.max_niveles is None:
-            self.bloque_limite.controls = []
-            return
-
-        self.boton_comparar.disabled = vista.comparando
-        self.boton_comparar.content = (
-            "Comparando..." if vista.comparando else "Comparar con búsqueda sin límite"
-        )
-        controles: list[ft.Control] = [self.boton_comparar]
-
-        if vista.comparacion is not None:
-            controles.append(self._tabla_comparacion(vista, resultado))
-
-        self.bloque_limite.controls = controles
-
-    def _tabla_comparacion(self, vista: Vista, resultado: Resultado) -> ft.Control:
-        sin = vista.comparacion
-        assert sin is not None
-
-        def fila(nombre: str, r: Resultado) -> ft.Control:
-            if r.estado == "incompleta":
-                final = "no terminó (se agotó el presupuesto)"
-            elif r.estado == "sugerida":
-                final = f"sugiere «{r.sugerencia}», costo {r.costo}"
-            else:
-                final = "sin corrección"
-
-            return ft.Text(
-                f"{nombre}: {r.expandidos:,} estados expandidos, "
-                f"frontera máxima {r.frontera_maxima:,}; {final}.",
-                size=13,
-                color=ft.Colors.BLUE_GREY_900,
-            )
-
-        return ft.Container(
-            padding=10,
-            border_radius=8,
-            bgcolor=PRIMARIO_SUAVE,
-            content=ft.Column(
-                [
-                    fila(f"Con límite de {texto_cambios(vista.max_niveles)}", resultado),
-                    fila("Sin límite", sin),
-                ],
-                spacing=4,
-            ),
-        )
-
     def _dibujar_empates(self, resultado: Resultado) -> None:
         """Palabras de igual costo con su frecuencia; gana la más usada."""
         candidatas = resultado.empates[:MAX_EMPATES_EN_PANEL]
@@ -1556,7 +1505,6 @@ class Aplicacion:
             if vista.max_niveles is None
             else texto_cambios(vista.max_niveles)
         )
-        self.bloque_limite.controls = []
         self.bloque_empates.controls = []
 
         if vista.fase == "sugerida":
@@ -1575,7 +1523,6 @@ class Aplicacion:
                 f"Teclado usado: {vista.teclado.nombre}. "
                 f"Límite de cambios: {limite}."
             )
-            self._dibujar_limite(vista, resultado)
             self._dibujar_empates(resultado)
             self.boton_aceptar.visible = True
             self.boton_rechazar.content = "Rechazar"
@@ -1596,7 +1543,6 @@ class Aplicacion:
                 f"{texto_cambios(vista.max_niveles)} o menos de la que escribiste. "
                 f"Teclado usado: {vista.teclado.nombre}."
             )
-            self._dibujar_limite(vista, resultado)
             self.boton_aceptar.visible = False
             self.boton_rechazar.content = "Conservar original"
         else:

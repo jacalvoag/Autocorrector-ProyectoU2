@@ -247,38 +247,6 @@ class TestControlador(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.controlador.cambiar_max_niveles(0)
 
-    def test_comparar_sin_limite_guarda_la_otra_busqueda(self):
-        vista = self.escribir("nmovte ")
-        self.assertIsNone(vista.comparacion)
-
-        self.controlador.comparar_sin_limite()
-        self.assertTrue(self.controlador.vista().comparando)
-        self.ejecutor.correr_todas()
-        vista = self.controlador.vista()
-
-        self.assertFalse(vista.comparando)
-        self.assertEqual(vista.comparacion.sugerencia, "nombre")
-        self.assertGreater(
-            vista.comparacion.frontera_maxima, vista.resultado.frontera_maxima
-        )
-
-    def test_comparacion_se_descarta_si_cambia_la_entrada(self):
-        self.escribir("nmovte ")
-        self.controlador.comparar_sin_limite()
-        self.controlador.actualizar_entrada("nmov")
-        self.ejecutor.correr_todas()
-        vista = self.controlador.vista()
-
-        self.assertIsNone(vista.comparacion)
-        self.assertFalse(vista.comparando)
-
-    def test_no_compara_cuando_ya_no_hay_limite(self):
-        self.controlador.cambiar_max_niveles(None)
-        self.escribir("nmovte ")
-        self.controlador.comparar_sin_limite()
-
-        self.assertEqual(self.ejecutor.pendientes, [])
-
     def test_sin_correccion_cercana_conserva_la_entrada(self):
         vista = self.escribir("xyzxyz ")
 
@@ -586,7 +554,7 @@ class TestVistaFlet(unittest.TestCase):
         self.assertIn("Límite: 3 cambios", textos)
         self.assertIn("Escribiste", textos)
         self.assertIn("Nivel 1", textos)
-        self.assertIn("Nivel 3 · límite", textos)
+        self.assertIn("Nivel 3\nlímite", textos)
         self.assertIn("nmovte", textos)
         self.assertIn("nombre", textos)
 
@@ -595,8 +563,8 @@ class TestVistaFlet(unittest.TestCase):
         textos = self.textos(self.app.grafo.lateral)
 
         self.assertIn("Límite: 2 cambios", textos)
-        self.assertIn("Nivel 2 · límite", textos)
-        self.assertNotIn("Nivel 3 · límite", textos)
+        self.assertIn("Nivel 2\nlímite", textos)
+        self.assertNotIn("Nivel 3\nlímite", textos)
 
     def test_arbol_del_limite_cuenta_combinaciones_cortadas(self):
         self.app.controlador.actualizar_entrada("nmovte ")
@@ -652,14 +620,6 @@ class TestVistaFlet(unittest.TestCase):
         textos = self.textos(self.app.bloque_empates)
 
         self.assertTrue(any("única palabra" in t for t in textos))
-
-    def test_comparar_sin_limite_muestra_ambas_busquedas(self):
-        self.app.controlador.actualizar_entrada("nmovte ")
-        self.app.boton_comparar.on_click(None)
-        textos = self.textos(self.app.bloque_limite)
-
-        self.assertTrue(any(t.startswith("Con límite de 3 cambios") for t in textos))
-        self.assertTrue(any(t.startswith("Sin límite") for t in textos))
 
     def test_senalar_tecla_resalta_vecinas(self):
         self.app._al_senalar("g", True)
