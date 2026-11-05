@@ -221,30 +221,56 @@ def ficha_palabra(palabra: str) -> ft.Container:
     )
 
 
-def ficha_empate(palabra: str, frecuencia: float, elegida: bool) -> ft.Container:
-    """Una palabra que cuesta lo mismo que la sugerida, con su frecuencia."""
+def casilla_cambio(numero: int, estado: str) -> ft.Container:
+    """Un cuadro por cambio permitido: lleno si se usó, vacío si no."""
+    colores = {
+        "usado": (PRIMARIO, PRIMARIO, ft.Colors.WHITE),
+        "libre": (SUPERFICIE, GRIS_BORDE, TEXTO_SECUNDARIO),
+        "agotado": (ft.Colors.RED_50, ERROR, ERROR),
+    }
+    fondo, borde, texto = colores[estado]
+
     return ft.Container(
-        padding=ft.Padding.symmetric(vertical=6, horizontal=12),
-        border_radius=10,
-        bgcolor=ft.Colors.GREEN_50 if elegida else GRIS_FONDO,
-        border=ft.Border.all(1, EXITO if elegida else GRIS_BORDE),
-        content=ft.Column(
-            [
-                ft.Text(
-                    palabra,
-                    size=15,
-                    weight=ft.FontWeight.BOLD if elegida else ft.FontWeight.W_500,
-                    color=EXITO if elegida else PRIMARIO,
-                ),
-                ft.Text(
-                    f"frecuencia {frecuencia:.2f}" + ("  ·  elegida" if elegida else ""),
-                    size=11,
-                    color=TEXTO_SECUNDARIO,
-                ),
-            ],
-            spacing=0,
-            tight=True,
-        ),
+        width=32,
+        height=32,
+        alignment=ft.Alignment.CENTER,
+        border_radius=6,
+        bgcolor=fondo,
+        border=ft.Border.all(1, borde),
+        content=ft.Text("X" if estado == "agotado" else str(numero), size=13, weight=ft.FontWeight.BOLD, color=texto),
+    )
+
+
+ANCHO_BARRA = 240
+ZIPF_MAXIMO = 8.0
+
+
+def barra_frecuencia(palabra: str, frecuencia: float, elegida: bool) -> ft.Row:
+    """Fila con una barra proporcional a la frecuencia de la palabra."""
+    return ft.Row(
+        [
+            ft.Text(
+                palabra,
+                width=70,
+                size=15,
+                weight=ft.FontWeight.BOLD if elegida else ft.FontWeight.W_500,
+                color=EXITO if elegida else PRIMARIO,
+            ),
+            ft.Container(
+                width=max(4.0, ANCHO_BARRA * min(frecuencia, ZIPF_MAXIMO) / ZIPF_MAXIMO),
+                height=16,
+                border_radius=4,
+                bgcolor=EXITO if elegida else GRIS_BORDE,
+            ),
+            ft.Text(
+                f"{frecuencia:.2f}" + ("  elegida" if elegida else ""),
+                size=12,
+                color=EXITO if elegida else TEXTO_SECUNDARIO,
+                weight=ft.FontWeight.BOLD if elegida else ft.FontWeight.NORMAL,
+            ),
+        ],
+        spacing=10,
+        vertical_alignment=ft.CrossAxisAlignment.CENTER,
     )
 
 
@@ -694,6 +720,19 @@ class Aplicacion:
             + [ft.DropdownOption(key=CLAVE_ALEATORIA, text="Aleatoria")],
             on_select=self._al_elegir_teclado,
         )
+        self.selector_niveles = ft.Dropdown(
+            label="Límite de cambios",
+            width=200,
+            dense=True,
+            options=[
+                ft.DropdownOption(
+                    key="sin" if valor is None else str(valor),
+                    text="Sin límite" if valor is None else texto_cambios(valor),
+                )
+                for valor in OPCIONES_NIVELES
+            ],
+            on_select=self._al_elegir_niveles,
+        )
         self.boton_generar = ft.OutlinedButton(
             content="Generar aleatorio",
             icon=ft.Icons.CASINO_OUTLINED,
@@ -717,7 +756,7 @@ class Aplicacion:
         return tarjeta(
             titulo_seccion(ft.Icons.KEYBOARD, "Teclado"),
             ft.Row(
-                [self.selector, self.boton_generar],
+                [self.selector, self.selector_niveles, self.boton_generar],
                 wrap=True,
                 spacing=10,
                 run_spacing=10,
@@ -755,19 +794,6 @@ class Aplicacion:
             border_radius=10,
             on_change=lambda e: self.controlador.actualizar_entrada(e.control.value),
         )
-        self.selector_niveles = ft.Dropdown(
-            label="Límite de cambios",
-            width=200,
-            dense=True,
-            options=[
-                ft.DropdownOption(
-                    key="sin" if valor is None else str(valor),
-                    text="Sin límite" if valor is None else texto_cambios(valor),
-                )
-                for valor in OPCIONES_NIVELES
-            ],
-            on_select=self._al_elegir_niveles,
-        )
         self.progreso = ft.ProgressBar(color=PRIMARIO, bgcolor=PRIMARIO_SUAVE)
         self.icono_aviso = ft.Icon(ft.Icons.INFO_OUTLINE, size=20)
         self.aviso = ft.Text(size=14, selectable=True, expand=True)
@@ -793,7 +819,6 @@ class Aplicacion:
         return tarjeta(
             titulo_seccion(ft.Icons.EDIT_NOTE, "Palabra"),
             self.campo,
-            self.selector_niveles,
             self.progreso,
             self.caja_aviso,
             ft.Divider(height=1, color=BORDE),
@@ -823,10 +848,13 @@ class Aplicacion:
             color=TEXTO_SECUNDARIO,
         )
         self.nota_resultado = ft.Text(size=13, color=TEXTO_SECUNDARIO)
-        self.titulo_empates = ft.Text(
-            size=13, weight=ft.FontWeight.BOLD, color=TEXTO_SECUNDARIO
+        self.bloque_limite = ft.Column(spacing=8)
+        self.bloque_empates = ft.Column(spacing=8)
+        self.boton_comparar = ft.OutlinedButton(
+            content="Comparar con búsqueda sin límite",
+            icon=ft.Icons.COMPARE_ARROWS,
+            on_click=lambda e: self._tecla(self.controlador.comparar_sin_limite),
         )
-        self.empates = ft.Row(wrap=True, spacing=8, run_spacing=8)
         self.grafo = GrafoBusqueda(self.page)
         self.boton_aceptar = ft.FilledButton(
             content="Aceptar",
@@ -854,8 +882,8 @@ class Aplicacion:
             self.titulo_ruta,
             self.ruta,
             self.nota_resultado,
-            self.titulo_empates,
-            self.empates,
+            self.bloque_limite,
+            self.bloque_empates,
             self.grafo.contenedor,
             ft.Row([self.boton_aceptar, self.boton_rechazar], spacing=10),
         )
@@ -1011,21 +1039,135 @@ class Aplicacion:
         self.teclado.width = ancho * PASO
         self.teclado.height = alto * PASO
 
+    def _dibujar_limite(self, vista: Vista, resultado: Resultado) -> None:
+        """Cuántos cambios usó la corrección y cuántos permitía el límite."""
+        limite = vista.max_niveles
+        usados = len(resultado.ruta)
+        sin_correccion = resultado.estado == "sin_correccion"
+
+        if limite is None:
+            titulo = f"Cambios usados: {usados} (sin límite)"
+            casillas: list[ft.Control] = [
+                casilla_cambio(n, "usado") for n in range(1, usados + 1)
+            ]
+            explicacion = "No hay límite: A* puede explorar palabras tan lejanas como haga falta."
+        else:
+            if sin_correccion:
+                titulo = f"Ninguna palabra a {texto_cambios(limite)} o menos"
+                estados = ["agotado"] * limite
+            else:
+                titulo = f"Cambios usados: {usados} de {limite} permitidos"
+                estados = ["usado"] * usados + ["libre"] * (limite - usados)
+
+            casillas = [casilla_cambio(n, e) for n, e in enumerate(estados, 1)]
+            explicacion = (
+                f"A* no revisa palabras que necesiten más de {texto_cambios(limite)}: "
+                "corta esas ramas y por eso explora menos estados."
+            )
+
+        controles: list[ft.Control] = [
+            ft.Text("Límite de cambios", size=13, weight=ft.FontWeight.BOLD, color=TEXTO_SECUNDARIO),
+            ft.Row(
+                [ft.Text(titulo, size=15, weight=ft.FontWeight.BOLD, color=PRIMARIO), *casillas],
+                spacing=8,
+                wrap=True,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+            ft.Text(explicacion, size=13, color=TEXTO_SECUNDARIO),
+        ]
+
+        if limite is not None:
+            controles.append(self.boton_comparar)
+            self.boton_comparar.disabled = vista.comparando
+            self.boton_comparar.content = (
+                "Comparando..." if vista.comparando else "Comparar con búsqueda sin límite"
+            )
+
+        if vista.comparacion is not None and limite is not None:
+            controles.append(self._tabla_comparacion(vista, resultado))
+
+        self.bloque_limite.controls = [
+            ft.Container(
+                padding=14,
+                border_radius=10,
+                bgcolor=SUPERFICIE,
+                border=ft.Border.all(1, BORDE),
+                content=ft.Column(controles, spacing=8),
+            )
+        ]
+
+    def _tabla_comparacion(self, vista: Vista, resultado: Resultado) -> ft.Control:
+        sin = vista.comparacion
+        assert sin is not None
+
+        def fila(nombre: str, r: Resultado) -> ft.Control:
+            if r.estado == "incompleta":
+                final = "no terminó (se agotó el presupuesto)"
+            elif r.estado == "sugerida":
+                final = f"sugiere «{r.sugerencia}», costo {r.costo}"
+            else:
+                final = "sin corrección"
+
+            return ft.Text(
+                f"{nombre}: {r.expandidos:,} estados expandidos, "
+                f"frontera máxima {r.frontera_maxima:,}; {final}.",
+                size=13,
+                color=ft.Colors.BLUE_GREY_900,
+            )
+
+        return ft.Container(
+            padding=10,
+            border_radius=8,
+            bgcolor=PRIMARIO_SUAVE,
+            content=ft.Column(
+                [
+                    fila(f"Con límite de {texto_cambios(vista.max_niveles)}", resultado),
+                    fila("Sin límite", sin),
+                ],
+                spacing=4,
+            ),
+        )
+
     def _dibujar_empates(self, resultado: Resultado) -> None:
-        """Muestra por qué se eligió esta palabra cuando hay varias iguales."""
+        """Palabras de igual costo con su frecuencia; gana la más usada."""
         candidatas = resultado.empates[:6]
 
-        if len(candidatas) < 2:
+        if not candidatas:
             return
 
-        self.titulo_empates.visible = True
-        self.titulo_empates.value = (
-            f"{len(resultado.empates)} palabras cuestan lo mismo "
-            f"({resultado.costo}). Se elige la más usada."
-        )
-        self.empates.controls = [
-            ficha_empate(palabra, frecuencia, palabra == resultado.sugerencia)
+        if len(candidatas) == 1:
+            palabra, frecuencia = candidatas[0]
+            cabecera = (
+                f"«{palabra}» es la única palabra a costo {resultado.costo} "
+                f"(frecuencia {frecuencia:.2f}); no hubo empate."
+            )
+        else:
+            cabecera = (
+                f"{len(resultado.empates)} palabras cuestan lo mismo "
+                f"({resultado.costo}). Desempata la frecuencia: gana la más usada."
+            )
+
+        filas = [
+            barra_frecuencia(palabra, frecuencia, palabra == resultado.sugerencia)
             for palabra, frecuencia in candidatas
+            if len(candidatas) > 1
+        ]
+
+        self.bloque_empates.controls = [
+            ft.Container(
+                padding=14,
+                border_radius=10,
+                bgcolor=SUPERFICIE,
+                border=ft.Border.all(1, BORDE),
+                content=ft.Column(
+                    [
+                        ft.Text("Desempate por frecuencia", size=13, weight=ft.FontWeight.BOLD, color=TEXTO_SECUNDARIO),
+                        ft.Text(cabecera, size=14, color=ft.Colors.BLUE_GREY_900),
+                        *filas,
+                    ],
+                    spacing=8,
+                ),
+            )
         ]
 
     def _dibujar_resultado(self, vista: Vista) -> None:
@@ -1058,8 +1200,8 @@ class Aplicacion:
             if vista.max_niveles is None
             else texto_cambios(vista.max_niveles)
         )
-        self.titulo_empates.visible = False
-        self.empates.controls = []
+        self.bloque_limite.controls = []
+        self.bloque_empates.controls = []
 
         if vista.fase == "sugerida":
             self.titulo_resultado.value = f"{resultado.original}  ->  {resultado.sugerencia}"
@@ -1077,6 +1219,7 @@ class Aplicacion:
                 f"Teclado usado: {vista.teclado.nombre}. "
                 f"Límite de cambios: {limite}."
             )
+            self._dibujar_limite(vista, resultado)
             self._dibujar_empates(resultado)
             self.boton_aceptar.visible = True
             self.boton_rechazar.content = "Rechazar"
@@ -1097,6 +1240,7 @@ class Aplicacion:
                 f"{texto_cambios(vista.max_niveles)} o menos de la que escribiste. "
                 f"Teclado usado: {vista.teclado.nombre}."
             )
+            self._dibujar_limite(vista, resultado)
             self.boton_aceptar.visible = False
             self.boton_rechazar.content = "Conservar original"
         else:

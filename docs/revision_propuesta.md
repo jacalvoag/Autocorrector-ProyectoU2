@@ -151,14 +151,21 @@ nuevo.
 
 ## Lo que se ve en la ventana
 
-- Selector "Límite de cambios" (1 a 5 o sin límite), debajo del campo de
-  palabra. Cambiarlo descarta la revisión pendiente; al volver a escribir
-  la palabra, la búsqueda usa el límite nuevo. Con 3, `nmovte` da `nombre`;
-  con 2, `norte`; con 1, "sin corrección cercana".
-- Cuando varias palabras cuestan lo mismo, el panel de resultado las lista
-  con su frecuencia y marca la elegida (`Resultado.empates`). Ejemplo:
-  `nmovte` con límite 2 muestra `norte` (5.20, elegida) y `monte` (4.48).
-  Si solo hay una palabra a ese costo, el bloque no aparece.
+- Selector "Límite de cambios" (1 a 5 o sin límite) junto al de teclado.
+  Cambiarlo descarta la revisión pendiente; al volver a escribir la palabra,
+  la búsqueda usa el límite nuevo.
+- Indicador de cambios usados: "Cambios usados: 3 de 3 permitidos" con un
+  cuadro por cambio (lleno si se usó, vacío si no). Si no hay corrección
+  dentro del límite, los cuadros salen en rojo con una X.
+- Botón "Comparar con búsqueda sin límite": repite la búsqueda sin límite y
+  muestra, una junto a la otra, los estados expandidos, la frontera máxima
+  y la sugerencia de cada una (`nmovte`: 449 y 10,448 con límite de 3 contra
+  460 y 43,898 sin límite).
+- Bloque "Desempate por frecuencia": lista las palabras que cuestan lo mismo
+  con una barra proporcional a su frecuencia y marca la elegida. `nmovte`
+  con límite 2 muestra `norte` (5.20, elegida) y `monte` (4.48). Si solo hay
+  una palabra a ese costo, el bloque lo dice. Los datos vienen de
+  `Resultado.empates`.
 
 ## Pendientes
 

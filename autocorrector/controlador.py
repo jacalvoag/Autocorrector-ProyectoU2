@@ -58,6 +58,9 @@ class Vista:
     teclas_resaltadas: frozenset[str]
     traza: tuple[Expansion, ...] = ()
     max_niveles: int | None = None
+    # Misma búsqueda sin límite de cambios, para compararla con la actual.
+    comparacion: Resultado | None = None
+    comparando: bool = False
 
 
 def texto_cambios(cantidad: int | None) -> str:
@@ -179,6 +182,8 @@ class Controlador:
         self._resultado: Resultado | None = None
         self._segundos: float | None = None
         self._traza: tuple[Expansion, ...] = ()
+        self._comparacion: Resultado | None = None
+        self._comparando = False
         self._texto: list[str] = []
         self._busqueda_actual: Busqueda | None = None
         self._contador = 0
@@ -202,6 +207,8 @@ class Controlador:
                 teclas_resaltadas=letras_sustituidas(self._resultado),
                 traza=self._traza,
                 max_niveles=self._max_niveles,
+                comparacion=self._comparacion,
+                comparando=self._comparando,
             )
 
     # Teclados
@@ -276,6 +283,50 @@ class Controlador:
                 )
             else:
                 self._avisar(f"Límite de cambios: {texto}.", "info")
+
+        self._notificar()
+
+    def comparar_sin_limite(self) -> None:
+        """Repite la búsqueda actual sin límite para ver cuánto se ahorra."""
+        with self._candado:
+            actual = self._resultado
+
+            if (
+                self._fase not in ("sugerida", "sin_correccion")
+                or actual is None
+                or self._max_niveles is None
+                or self._comparando
+            ):
+                return
+
+            self._comparando = True
+            self._comparacion = None
+            palabra = actual.original
+            teclado = self._teclado
+
+        self._notificar()
+        self._ejecutar(lambda: self._correr_comparacion(actual, palabra, teclado))
+
+    def _correr_comparacion(
+        self, actual: Resultado, palabra: str, teclado: Distribucion
+    ) -> None:
+        try:
+            comparacion = self._buscar(
+                palabra,
+                teclado,
+                self.diccionario,
+                max_estados=self._max_estados,
+                max_niveles=None,
+            )
+        except Exception:
+            comparacion = None
+
+        with self._candado:
+            if self._resultado is actual:
+                self._comparacion = comparacion
+                self._comparando = False
+            else:
+                return  # La entrada cambió: este resultado ya no aplica.
 
         self._notificar()
 
@@ -396,6 +447,8 @@ class Controlador:
             self._busqueda_actual = None
             self._segundos = segundos
             self._traza = traza
+            self._comparacion = None
+            self._comparando = False
 
             if error is not None or resultado is None:
                 self._fase = "escribiendo"
@@ -481,6 +534,8 @@ class Controlador:
         self._resultado = None
         self._segundos = None
         self._traza = ()
+        self._comparacion = None
+        self._comparando = False
 
     def _descartar_pendiente(self) -> bool:
         """Invalida la búsqueda o sugerencia en curso. Indica si había una."""
@@ -490,6 +545,8 @@ class Controlador:
         self._resultado = None
         self._segundos = None
         self._traza = ()
+        self._comparacion = None
+        self._comparando = False
         return habia
 
     def _avisar(self, mensaje: str, tipo: TipoAviso) -> None:
